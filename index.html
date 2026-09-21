@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión Salidas</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<meta name="theme-color" content="#1c2b45">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Salidas">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#f3f4f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/>
+          <circle cx="7.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
+          <circle cx="17.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
+        </svg>
+      </div>
+      <h1>Gestión Salidas</h1>
+      <p class="sub">Gestión de conteos y avisos a tiendas y agencias</p>
+
+      <div class="campo-pass">
+        <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        <input type="text" id="login-usuario" placeholder="Usuario" autocomplete="username" autofocus>
+      </div>
+      <div class="campo-pass">
+        <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password">
+        <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+
+      <button class="btn-primary" id="btn-login" onclick="intentarLogin()">
+        <span class="spinner" id="login-spinner"></span>
+        <span id="login-btn-text">Entrar</span>
+      </button>
+      <p id="login-error">Usuario o contraseña incorrectos</p>
+    </div>
+    <div class="version-badge" id="login-version-badge"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">GESTIÓN <span>SALIDAS</span></div>
+      <nav class="topbar-nav" id="topbar-nav">
+        <button type="button" class="topbar-nav-item" data-vista="inicio">Inicio</button>
+        <button type="button" class="topbar-nav-item" data-vista="conteos">Conteos Diarios</button>
+        <div class="topbar-nav-dropdown" id="topbar-dropdown-configuracion">
+          <button type="button" class="topbar-nav-item topbar-nav-item-dropdown" data-vista="configuracion" aria-haspopup="true" aria-expanded="false">
+            Diseño
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="topbar-dropdown-menu" id="topbar-dropdown-menu-configuracion"></div>
+        </div>
+        <div class="topbar-nav-dropdown" id="topbar-dropdown-administracion">
+          <button type="button" class="topbar-nav-item topbar-nav-item-dropdown" data-vista="administracion" aria-haspopup="true" aria-expanded="false">
+            Administración
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="topbar-dropdown-menu" id="topbar-dropdown-menu-administracion"></div>
+        </div>
+      </nav>
+      <div class="topbar-fecha-wrap" id="topbar-fecha-wrap">
+        <div class="topbar-fecha" id="topbar-fecha"></div>
+        <button type="button" class="btn-imprimir-dia" id="btn-imprimir-dia" title="Imprimir el conteo de este día">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+        </button>
+      </div>
+      <div class="topbar-derecha">
+        <span class="sync-indicator-global" id="sync-indicator-global"></span>
+        <div class="topbar-refresco-conteo" id="topbar-refresco-conteo" title="Tiempo hasta el próximo sondeo automático del conteo del día"></div>
+        <div class="topbar-reloj" id="topbar-reloj"></div>
+        <div class="topbar-usuario">
+          <button type="button" class="btn-mi-usuario" id="btn-mi-usuario" title="Mi usuario">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span class="topbar-usuario-rol" id="topbar-usuario-rol">&nbsp;</span>
+          </button>
+          <button type="button" class="btn-salir" onclick="cerrarSesion()">Salir</button>
+        </div>
+      </div>
+    </header>
+    <main id="main"></main>
+  </div>
+
+  <!-- Hoja de impresión del conteo del día: se genera aparte (ver
+       construirHojaImpresionDia_ / imprimirConteoDia_), como cuadrícula
+       pensada para rellenar a mano, independiente del diseño de pantalla.
+       Solo es visible mientras se imprime (ver @media print). -->
+  <div id="hoja-impresion-manual"></div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-box" id="modal-box">
+      <button type="button" class="modal-cerrar-x" id="modal-cerrar-x" title="Cerrar" aria-label="Cerrar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h3 id="modal-title"></h3>
+      <p id="modal-text"></p>
+      <div id="modal-custom" style="display:none;"></div>
+      <textarea id="modal-textarea" style="display:none;" placeholder="Escribe aquí…"></textarea>
+      <div class="modal-actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+<!-- ORDEN DE CARGA (importa). Son scripts normales (no módulos): comparten ámbito global y se ejecutan de
+     arriba abajo. Cada archivo puede usar, EN EL MOMENTO DE CARGAR, solo lo definido en los anteriores
+     (dentro de funciones sí puede usar lo de cualquier archivo, porque se ejecutan más tarde).
+     utilidades.js y usuarios.js van ANTES de auth.js/navegacion-cabecera.js porque esos archivos usan
+     escapeHtml y enganchan abrirModalMiUsuario_ al cargar (antes, al ser un solo script, se "elevaban").
+     Al añadir un .js nuevo: ponlo aquí en su sitio Y en APP_SHELL de service-worker.js. -->
+<script src="js/modal-scroll.js"></script>
+<script src="js/config.js"></script>
+<script src="js/supabase-client.js"></script>
+<script src="js/instalar-app.js"></script>
+<script src="js/permisos.js"></script>
+<script src="js/api.js"></script>
+<script src="js/acciones-supabase.js"></script>
+<script src="js/sesion.js"></script>
+<script src="js/estado.js"></script>
+<script src="js/utilidades.js"></script>
+<script src="js/usuarios.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/navegacion-cabecera.js"></script>
+<script src="js/fechas.js"></script>
+<script src="js/navegacion.js"></script>
+<script src="js/festivos.js"></script>
+<script src="js/emails-agencias.js"></script>
+<script src="js/tiendas.js"></script>
+<script src="js/palets-forzados.js"></script>
+<script src="js/servidores.js"></script>
+<script src="js/cola-avisos.js"></script>
+<script src="js/plantilla.js"></script>
+<script src="js/conteos-calendario.js"></script>
+<script src="js/conteos-dia.js"></script>
+<script src="js/conteos-resumen.js"></script>
+<script src="js/conteos-panel.js"></script>
+<script src="js/conteos-pdf.js"></script>
+<script src="js/conteos-badges.js"></script>
+<script src="js/conteos-impresion.js"></script>
+<script src="js/conteos-filas.js"></script>
+<script src="js/observaciones.js"></script>
+<script src="js/gestor-observaciones.js"></script>
+<script src="js/ui-modal.js"></script>
+<script src="js/actualizaciones.js"></script>
+</body>
+</html>
