@@ -1783,10 +1783,11 @@
   .modal-box.ancho { max-width: 680px; }
 
   /* ---------- Modal "Añadir/Editar usuario": mucho más ancho, con los
-     datos básicos a la izquierda y los permisos a la derecha, pensado
-     para verse entero de un vistazo sin necesidad de hacer scroll. ---------- */
+     datos básicos a la izquierda y los permisos a la derecha (4 grupos en
+     una fila), pensado para verse entero de un vistazo sin necesidad de
+     hacer scroll. ---------- */
   .modal-box.usuario-form {
-    max-width: 1100px; min-height: 620px; padding: 34px;
+    max-width: 1400px; min-height: 620px; padding: 34px;
     display: flex; flex-direction: column;
   }
   .modal-box.usuario-form #modal-custom { flex: 1; }
@@ -1794,9 +1795,13 @@
   .modal-usuario-grid { display: flex; gap: 36px; align-items: flex-start; }
   .modal-usuario-col-izq { flex: 0 0 270px; display: flex; flex-direction: column; }
   .modal-usuario-col-der { flex: 1; min-width: 0; }
-  .modal-usuario-col-der .permisos-grupos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .modal-usuario-col-der .permisos-grupos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .modal-usuario-col-der .permiso-grupo { padding: 13px 14px; }
   .modal-usuario-col-der .permiso-item { padding: 8px 3px; }
+  /* En pantallas de menos de 1300px no caben 4 columnas legibles: 2 y 2. */
+  @media (max-width: 1300px) {
+    .modal-usuario-col-der .permisos-grupos { grid-template-columns: repeat(2, 1fr); }
+  }
   @media (max-width: 720px) {
     .modal-usuario-grid { flex-direction: column; gap: 0; }
     .modal-usuario-col-izq { flex-basis: auto; width: 100%; }
