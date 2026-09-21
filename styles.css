@@ -1772,6 +1772,10 @@
   .modal-confirm:disabled:hover { filter: none; }
 
   /* ---------- Modal de confirmación "peligro" (borrado) ---------- */
+  /* Modal "Sin permiso": icono arriba, título en rojo y un solo botón "Aceptar". */
+  .modal-box.sin-permiso .modal-cerrar-x { display: none; }
+  .modal-box.sin-permiso h3 { color: var(--danger); padding-right: 0; }
+  .modal-box.sin-permiso h3::before { content: '\26D4'; display: block; font-size: 24px; line-height: 1; margin-bottom: 8px; }
   .modal-box.peligro { border-top: 5px solid var(--danger); }
   .modal-box.peligro h3 { color: var(--danger); display: flex; align-items: center; gap: 8px; }
   .modal-box.peligro h3::before {
