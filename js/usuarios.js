@@ -32,6 +32,13 @@ const CATALOGO_PERMISOS = [
     ],
   },
   {
+    grupo: 'Envíos a agencias',
+    items: [
+      { clave: 'enviar_prevision', etiqueta: 'Enviar previsión', desc: 'Enviar por email la previsión de una agrupación a la agencia de transporte (el conteo sigue siendo editable).' },
+      { clave: 'enviar_definitivo', etiqueta: 'Enviar definitivo', desc: 'Enviar por email el definitivo de una agrupación a la agencia de transporte (queda bloqueada y archivada).' },
+    ],
+  },
+  {
     grupo: 'Diseño (configuración)',
     items: [
       { clave: 'tiendas', etiqueta: 'Configuración de tiendas', desc: 'Editar email y notas de cada tienda, días de entrega y sincronizar tiendas.' },

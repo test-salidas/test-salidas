@@ -446,6 +446,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   if (btnHeaderPrevision) {
     btnHeaderPrevision.onclick = function (e) {
       e.stopPropagation();
+      // El botón se ve siempre, pero enviar requiere el permiso "Enviar previsión"
+      // (el backend lo vuelve a comprobar en enviar_prevision_agencia).
+      if (!tienePermiso('enviar_prevision')) { mostrarToast('Usuario sin permiso', true); return; }
       mostrarModalEnviarAgencia(calcularResumenEnvio(), function (callback) {
         enviarSeccion('prevision', callback);
       }, 'prevision');
@@ -456,6 +459,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   if (btnHeaderDefinitivo) {
     btnHeaderDefinitivo.onclick = function (e) {
       e.stopPropagation();
+      // Igual que la previsión: requiere el permiso "Enviar definitivo"
+      // (el backend lo vuelve a comprobar en enviar_definitivo_agencia).
+      if (!tienePermiso('enviar_definitivo')) { mostrarToast('Usuario sin permiso', true); return; }
       mostrarModalEnviarAgencia(calcularResumenEnvio(), function (callback) {
         enviarSeccion('definitivo', callback);
       }, 'definitivo');
