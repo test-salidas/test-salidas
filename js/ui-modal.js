@@ -192,6 +192,8 @@ function mostrarModalEnviarAgencia(datos, onConfirmar, tipo) {
     document.getElementById('modal-confirm-btn').onclick = function () {
       mostrarModalCargando(esDefinitivo ? 'Enviando el definitivo a la agencia, espere por favor…' : 'Enviando la previsión a la agencia, espere por favor…');
       onConfirmar(function (ok, mensaje) {
+        // Si el servidor dice que no hay permiso (p.ej. se lo quitaron con la sesión ya abierta), mismo aviso que al pulsar el botón.
+        if (!ok && mensaje === 'Usuario sin permiso') { mostrarModalSinPermiso(); return; }
         mostrarModalResultadoEnvio(ok, mensaje);
       });
     };
@@ -230,6 +232,25 @@ function mostrarModalResultadoEnvio(ok, mensaje) {
   }
 }
 
+/** Aviso de "sin permiso": modal con un solo botón "Aceptar" (mismo aspecto que
+ *  el de GIDT). Se usa cuando alguien pulsa algo para lo que su usuario no tiene
+ *  el permiso (p.ej. Enviar previsión / Enviar definitivo). */
+function mostrarModalSinPermiso(mensaje) {
+  const box = document.getElementById('modal-box');
+  box.classList.remove('ancho', 'medio', 'usuario-form', 'peligro', 'actualizacion', 'gestor-obs');
+  box.classList.add('sin-permiso');
+  document.getElementById('modal-title').style.display = '';
+  document.getElementById('modal-title').textContent = 'Sin permiso';
+  document.getElementById('modal-text').textContent = mensaje || 'Usuario no cuenta con los permisos necesarios.';
+  document.getElementById('modal-text').style.display = 'block';
+  document.getElementById('modal-textarea').style.display = 'none';
+  document.getElementById('modal-custom').style.display = 'none';
+  document.getElementById('modal-custom').innerHTML = '';
+  document.getElementById('modal-actions').innerHTML = '<button class="modal-confirm danger" id="modal-confirm-btn">Aceptar</button>';
+  document.getElementById('modal-overlay').style.display = 'flex';
+  document.getElementById('modal-confirm-btn').onclick = cerrarModal;
+}
+
 function cerrarModal() {
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-overlay').classList.remove('overlay-actualizacion');
@@ -237,6 +258,7 @@ function cerrarModal() {
   document.getElementById('modal-box').classList.remove('medio');
   document.getElementById('modal-box').classList.remove('peligro');
   document.getElementById('modal-box').classList.remove('actualizacion');
+  document.getElementById('modal-box').classList.remove('sin-permiso');
   document.getElementById('modal-box').classList.remove('usuario-form');
   document.getElementById('modal-box').classList.remove('gestor-obs');
   document.getElementById('modal-box').classList.remove('orden-retirada-modal');
