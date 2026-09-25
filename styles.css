@@ -2313,6 +2313,92 @@
   .gestor-seleccion-contador { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
   .gestor-aviso { font-size: 12px; color: var(--ink-soft); background: #f6f7f9; border-radius: 8px; padding: 8px 10px; }
 
+  /* ---------- VERIFICAR CONTEO POR NAVE (60 / PTA / CART.) ----------
+     Botón en la cabecera de cada agrupación (junto a "Guardar conteo"),
+     pastillas de estado junto al nombre, columnas de otras naves en solo
+     lectura y modales de confirmación / selección de nave (admin). */
+  .verif-wrap { display: inline-flex; align-items: center; }
+  .btn-header-verificar {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff; color: var(--ok); border: 1.5px solid var(--ok); border-radius: 20px;
+    padding: 5px 13px 5px 10px; font-size: 11.5px; font-weight: 800; white-space: nowrap; flex-shrink: 0;
+    text-transform: uppercase; letter-spacing: .03em; cursor: pointer;
+  }
+  .btn-header-verificar:hover { background: #e9f6f0; }
+  .btn-header-verificar:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-header-verificar .verif-chip {
+    background: var(--ok); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 10.5px;
+  }
+  .btn-header-verificar.verificado { background: var(--ok); color: #fff; cursor: default; }
+  .verif-hecha { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .verif-quien { font-size: 10px; color: var(--ink-soft); white-space: nowrap; }
+
+  .verif-pastillas { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .verif-pastillas:empty { display: none; }
+  .verif-pastilla {
+    display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 800;
+    padding: 2px 7px; border-radius: 20px; background: #eef0f4; color: #8a919d; white-space: nowrap;
+  }
+  .verif-pastilla svg { width: 10px; height: 10px; }
+  .verif-pastilla.ok { background: #e3f3ec; color: var(--ok); }
+
+  table.conteo thead th.th-campo-nave svg { vertical-align: -1px; margin-right: 3px; }
+  table.conteo thead th.th-nave-propia { color: #8a5414; background: #fdf1de; }
+  table.conteo thead th.th-nave-bloqueada { color: #9aa1ad; }
+  table.conteo thead th.th-verificada { color: var(--ok); background: #e3f3ec; }
+  table.conteo input.celda.celda-bloqueada-nave,
+  table.conteo input.celda-no.celda-bloqueada-nave {
+    background: #eef0f3; color: #6b7380; border: 1px dashed #cfd3da; cursor: not-allowed; opacity: 1;
+  }
+
+  .verif-modal { display: flex; flex-direction: column; gap: 12px; }
+  .verif-modal-titulo { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; color: var(--navy); }
+  .verif-modal-titulo svg { color: var(--ok); }
+  .verif-modal-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: -8px; text-transform: capitalize; }
+  .verif-modal-nota { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .verif-vacias { background: #fdf1de; border: 1px solid #f1d3a6; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .verif-vacias-titulo { font-size: 12.5px; font-weight: 800; color: #8a5414; }
+  .verif-opciones { display: flex; flex-direction: column; gap: 8px; }
+  .verif-opcion {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: #fff; cursor: pointer; text-align: left;
+  }
+  .verif-opcion:hover { border-color: #b9c9bf; }
+  .verif-opcion:focus-visible { outline: 2px solid var(--prevision); outline-offset: 1px; }
+  .verif-opcion.es-verificada { background: #f7f8fa; }
+  .verif-opcion.elegida { border: 2px solid var(--ok); background: #f1faf6; }
+  .verif-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c5cad3; box-sizing: border-box; flex-shrink: 0; }
+  .verif-opcion.elegida .verif-radio { border: 6px solid var(--ok); }
+  .verif-opcion-textos { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+  .verif-opcion-titulo { font-size: 13.5px; font-weight: 800; color: var(--navy); }
+  .verif-opcion-detalle { font-size: 11.5px; color: var(--ink-soft); }
+  .verif-opcion-detalle.con-vacias { color: #8a5414; }
+  .verif-estado {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; white-space: nowrap;
+    background: #fdf1de; color: var(--amber-dark); border-radius: 20px; padding: 3px 9px;
+  }
+  .verif-estado.ok { background: #e3f3ec; color: var(--ok); }
+  .verif-estado svg { width: 11px; height: 11px; }
+  .verif-btn-anular {
+    background: #fff; border: 1.5px solid #e8b4b4; color: var(--danger); border-radius: 16px;
+    padding: 4px 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; cursor: pointer; flex-shrink: 0;
+  }
+  .verif-btn-anular:hover { background: #fceded; }
+  .modal-confirm.verif-confirmar { background: var(--ok); }
+  .modal-confirm.verif-confirmar:disabled { opacity: .55; cursor: not-allowed; }
+  @media (max-width: 520px) {
+    .verif-opcion { flex-wrap: wrap; }
+    .verif-hecha { align-items: flex-start; }
+  }
+
+  /* Nave del usuario en Administración > Usuarios */
+  .usuarios-badge-nave {
+    display: inline-flex; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px;
+    background: #fdf1de; color: #8a5414;
+  }
+  .usuarios-sin-nave { color: var(--ink-soft); }
+  #modal-usuario-nave-pills .modal-pill small { font-weight: 600; opacity: .75; }
+
   /* ---------- PERMISOS (admin vs operario con permisos finos) ----------
      A PROPÓSITO al final de la hoja de estilos: en CSS, con la misma
      especificidad, gana la regla que aparece más abajo, y .btn-add-nota /
