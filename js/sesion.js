@@ -14,6 +14,7 @@ function volverALogin_() {
   SESSION_ROL = null;
   SESSION_NOMBRE = null;
   SESSION_PERMISOS = {};
+  SESSION_NAVE = null;
   document.body.classList.remove('es-admin', 'tiene-menu-diseno', 'tiene-menu-administracion', 'vista-inicio-activa');
   CLAVES_PERMISOS_UI_.forEach(function (clave) { document.body.classList.remove('perm-' + clave); });
   mostrarToast('Sesión caducada, vuelve a entrar', true);
@@ -29,6 +30,7 @@ function cerrarSesion() {
   SESSION_ROL = null;
   SESSION_NOMBRE = null;
   SESSION_PERMISOS = {};
+  SESSION_NAVE = null;
   document.body.classList.remove('es-admin', 'tiene-menu-diseno', 'tiene-menu-administracion', 'vista-inicio-activa');
   CLAVES_PERMISOS_UI_.forEach(function (clave) { document.body.classList.remove('perm-' + clave); });
   document.getElementById('app').style.display = 'none';

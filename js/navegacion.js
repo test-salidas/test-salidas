@@ -212,10 +212,14 @@ function htmlFilaRutaInicio_(ruta, fecha) {
 /** estado: 'vacio' (gris, nada rellenado) | 'parcial' (naranja, alguna
  *  casilla rellenada) | 'completo' (verde, todas rellenadas -- con
  *  check). */
+// Con get_resumen_inicio_v2: 'completo' = esa nave ha VERIFICADO su
+// columna (o ya se envió el Definitivo); 'parcial' = hay datos pero sin
+// verificar; 'vacio' = sin datos.
+const INICIO_CHECK_TITULO_ = { completo: 'Verificado por la nave', parcial: 'Con datos, sin verificar', vacio: 'Sin datos' };
 function htmlCheckCircleInicio_(estado) {
   estado = estado || 'vacio';
   return (
-    '<span class="inicio-check-circle inicio-check-circle-' + estado + '">' +
+    '<span class="inicio-check-circle inicio-check-circle-' + estado + '" title="' + (INICIO_CHECK_TITULO_[estado] || '') + '">' +
       (estado === 'completo'
         ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
         : '') +

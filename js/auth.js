@@ -39,6 +39,7 @@ function intentarLogin() {
       SESSION_USUARIO = resultado.usuario;
       SESSION_NOMBRE = resultado.nombre_completo;
       SESSION_PERMISOS = resultado.permisos || {};
+      SESSION_NAVE = resultado.nave || null;
       aplicarPermisosUI();
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
