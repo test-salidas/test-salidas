@@ -63,13 +63,18 @@ function desplazarRowsPlantillaDesde_(filaDesde, delta) {
  *  loader, sin pedir nada al servidor); la llamada real al backend va en
  *  segundo plano. Si falla, se revierte el cambio local y se repinta con
  *  los datos de antes (igual que "Gestión festivos" al borrar una nota). */
-function guardarPlantillaOptimista_(mutarLocal, accionApi, argsApi, mensajeExito, onExito) {
+function guardarPlantillaOptimista_(mutarLocal, accionApi, argsApi, mensajeExito, onExito, onError) {
   // onExito (opcional): recibe el resultado que devuelva la API cuando
   // llegue, para acciones que necesitan reaccionar a algo que solo se
   // sabe en el backend (p.ej. avisar de que un renombrado se ha
   // propagado también a otros días). El toast optimista de arriba se
   // sigue mostrando al momento como siempre; onExito puede completarlo
   // o sustituirlo cuando responda el servidor.
+  // onError (opcional): recibe el error cuando el backend rechaza la
+  // acción, DESPUÉS de revertir ya el cambio optimista local. Si
+  // devuelve true, se entiende que el error ya se ha gestionado a mano
+  // (p.ej. abriendo un modal para preguntar algo) y no se muestra el
+  // toast de error genérico encima.
   const copia = JSON.parse(JSON.stringify(PLANTILLA_ESTADO.secciones));
   mutarLocal();
   pintarPlantilla_();
@@ -81,6 +86,7 @@ function guardarPlantillaOptimista_(mutarLocal, accionApi, argsApi, mensajeExito
     .catch(function (err) {
       PLANTILLA_ESTADO.secciones = copia;
       pintarPlantilla_();
+      if (onError && onError(err)) return;
       mostrarErrorServidor(err);
     });
 }
@@ -423,7 +429,7 @@ function pintarPlantilla_() {
             '<button type="button" data-bajar="' + t.row + '"' + (ti === s.tiendas.length - 1 ? ' disabled' : '') + ' title="Bajar">' +
               '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
           '</div>' +
-          '<span class="lim" title="Límite">' + escapeHtml(t.limite) + '</span>' +
+          '<span class="lim' + (t.limiteOverride ? ' lim-override' : '') + '" title="' + (t.limiteOverride ? 'Límite propio de este día (distinto del general de Configuración tiendas: ' + escapeAttr(t.limiteGeneral != null ? t.limiteGeneral : 'sin definir') + ')' : 'Límite (el general de Configuración tiendas)') + '">' + escapeHtml(textoLimite_(t.limite)) + '</span>' +
           camposNombreHtml +
           '<div class="plantilla-tienda-bloqueos">' +
             botonBloqueoPlantillaHtml_(t, 'c60', '60') +
@@ -435,7 +441,7 @@ function pintarPlantilla_() {
           (tienePermiso('plantilla') ? (
             '<button type="button" class="plantilla-tienda-mover" data-mover-tienda="' + t.row + '" title="Mover a otra agrupación">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>' +
-            '<button type="button" class="plantilla-tienda-editar" data-editar-tienda="' + t.row + '" title="Editar tienda">' +
+            '<button type="button" class="plantilla-tienda-editar" data-editar-tienda="' + t.row + '" title="Límite de palets de esta tienda">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>' +
             '<button type="button" class="plantilla-tienda-borrar" data-borrar-tienda="' + t.row + '" title="Eliminar tienda">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>'
@@ -472,7 +478,7 @@ function pintarPlantilla_() {
           '</div>' +
           '<span class="plantilla-ruta-nombre-texto">' + escapeHtml(s.nombre) + '</span>' +
           (tienePermiso('plantilla')
-            ? '<button type="button" class="plantilla-ruta-editar" data-editar-ruta="' + escapeAttr(s.nombre) + '" title="Editar nombre, ubicación y hora de carga">' +
+            ? '<button type="button" class="plantilla-ruta-editar" data-editar-ruta="' + escapeAttr(s.nombre) + '" title="Editar ubicación y hora de carga">' +
                 '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>'
             : '') +
           '<span class="plantilla-ruta-contador">' + s.tiendas.length + (s.tiendas.length === 1 ? ' tienda' : ' tiendas') + '</span>' +
@@ -710,42 +716,45 @@ function toggleBloqueoCampoTiendaPlantilla_(row, campo, activoActualmente) {
 /** Botón de lápiz de una fila de tienda: abre un modal para editar el
  *  límite, el número y el nombre a la vez (en vez de los campos sueltos
  *  que había antes en la propia fila). */
+/** Editar tienda desde "Rutas y tiendas": SOLO el límite de palets de
+ *  este día (o volver a usar el general). El número y el nombre de la
+ *  tienda ya NO se pueden cambiar desde aquí -- renombrar_tienda_config
+ *  (Configuración tiendas) es el único sitio que actualiza a la vez
+ *  Config_Tiendas y TODAS las apariciones en tiendas_ruta, así las dos
+ *  quedan siempre sincronizadas; editar_tienda_plantilla (este RPC) solo
+ *  tocaba tiendas_ruta, así que renombrar desde aquí podía desincronizar
+ *  el nombre/clave con Configuración tiendas (roturas de email, tránsito,
+ *  límite general...). Se sigue mandando el nombre actual sin tocar al
+ *  guardar, para no reventar el contrato del RPC (que lo exige). */
 function abrirModalEditarTiendaPlantilla_(row) {
   row = Number(row);
   const info = buscarTiendaPlantilla_(row);
   if (!info) return;
-  const partes = dividirNombreTiendaPlantilla_(info.tienda.nombre);
 
   document.getElementById('modal-box').classList.remove('ancho');
   document.getElementById('modal-box').classList.remove('medio');
   document.getElementById('modal-box').classList.remove('peligro');
   document.getElementById('modal-box').classList.remove('usuario-form');
   document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Editar tienda';
+  document.getElementById('modal-title').textContent = 'Límite de palets — ' + info.tienda.nombre;
   document.getElementById('modal-text').style.display = 'none';
   document.getElementById('modal-textarea').style.display = 'none';
+
+  const limiteGeneralTxt = info.tienda.limiteGeneral != null ? info.tienda.limiteGeneral : 'sin definir';
 
   const custom = document.getElementById('modal-custom');
   custom.style.display = 'block';
   custom.innerHTML =
     '<div class="modal-campo">' +
-      '<label for="modal-editar-tienda-lim">Límite de palets diarios</label>' +
-      '<input type="text" id="modal-editar-tienda-lim" inputmode="numeric" value="' + escapeAttr(info.tienda.limite) + '">' +
+      '<label>Límite de palets</label>' +
+      '<div class="modal-limite-pills">' +
+        '<button type="button" class="modal-limite-pill' + (info.tienda.limiteOverride ? '' : ' activa') + '" data-opcion="general">Usar el general (' + escapeHtml(limiteGeneralTxt) + ')</button>' +
+        '<button type="button" class="modal-limite-pill' + (info.tienda.limiteOverride ? ' activa' : '') + '" data-opcion="propio">Usar uno distinto solo este día</button>' +
+      '</div>' +
+      '<input type="text" id="modal-editar-tienda-lim" inputmode="numeric" placeholder="Ej: 6" style="margin-top:8px;' + (info.tienda.limiteOverride ? '' : 'display:none;') + '" value="' + escapeAttr(info.tienda.limiteOverride ? info.tienda.limite : '') + '">' +
+      '<span class="modal-campo-ayuda">El general se edita desde Configuración tiendas y se aplica a todos los días que no tengan aquí un valor propio.</span>' +
     '</div>' +
-    (partes
-      ? '<div class="modal-campo">' +
-          '<label for="modal-editar-tienda-numero">Número de tienda (3 dígitos)</label>' +
-          '<input type="text" id="modal-editar-tienda-numero" inputmode="numeric" maxlength="3" value="' + escapeAttr(partes.numero) + '">' +
-        '</div>' +
-        '<div class="modal-campo">' +
-          '<label for="modal-editar-tienda-nombre">Nombre de la tienda</label>' +
-          '<input type="text" id="modal-editar-tienda-nombre" style="text-transform:uppercase;" value="' + escapeAttr(partes.resto) + '">' +
-          '<span class="modal-campo-ayuda">Se guardará como "<span id="modal-editar-tienda-preview"></span>".</span>' +
-        '</div>'
-      : '<div class="modal-campo">' +
-          '<label for="modal-editar-tienda-nombre">Nombre de la tienda</label>' +
-          '<input type="text" id="modal-editar-tienda-nombre" value="' + escapeAttr(info.tienda.nombre) + '">' +
-        '</div>');
+    '<p class="modal-campo-ayuda" style="margin-top:2px;">El número y el nombre de la tienda se cambian desde <b>Configuración tiendas</b>: se actualizan solos en todas las rutas donde aparezca.</p>';
 
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
@@ -755,58 +764,35 @@ function abrirModalEditarTiendaPlantilla_(row) {
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
 
   const inputLim = document.getElementById('modal-editar-tienda-lim');
-  const inputNumero = document.getElementById('modal-editar-tienda-numero');
-  const inputNombre = document.getElementById('modal-editar-tienda-nombre');
 
-  if (inputNumero) {
-    const preview = document.getElementById('modal-editar-tienda-preview');
-    const actualizarPreview_ = function () {
-      const num = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-      const nom = inputNombre.value.trim().replace(/\s+/g, ' ');
-      preview.textContent = (num ? num.padStart(3, '0') : '000') + ' - ' + (nom || '…');
+  let usaLimitePropio = !!info.tienda.limiteOverride;
+  custom.querySelectorAll('.modal-limite-pill').forEach(function (btn) {
+    btn.onclick = function () {
+      usaLimitePropio = (btn.getAttribute('data-opcion') === 'propio');
+      custom.querySelectorAll('.modal-limite-pill').forEach(function (b) { b.classList.toggle('activa', b === btn); });
+      inputLim.style.display = usaLimitePropio ? '' : 'none';
+      if (usaLimitePropio) { inputLim.focus(); }
     };
-    inputNumero.oninput = function () {
-      inputNumero.value = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-      actualizarPreview_();
-    };
-    inputNombre.oninput = function () {
-      const pos = inputNombre.selectionStart;
-      inputNombre.value = inputNombre.value.toUpperCase();
-      inputNombre.setSelectionRange(pos, pos);
-      actualizarPreview_();
-    };
-    actualizarPreview_();
-  }
+  });
 
   document.getElementById('modal-confirm-btn').onclick = function () {
-    const limite = inputLim.value.trim();
-    if (limite === '' || isNaN(Number(limite))) { inputLim.focus(); return; }
-    let nombre;
-    if (inputNumero) {
-      const numero = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-      if (!numero) { inputNumero.focus(); return; }
-      const resto = inputNombre.value.trim().replace(/\s+/g, ' ').toUpperCase();
-      if (!resto) { inputNombre.focus(); return; }
-      nombre = numero.padStart(3, '0') + ' - ' + resto;
-    } else {
-      const libre = inputNombre.value.trim();
-      if (!libre) { inputNombre.focus(); return; }
-      nombre = libre;
+    let limite = '';
+    if (usaLimitePropio) {
+      limite = inputLim.value.trim();
+      if (limite === '' || isNaN(Number(limite))) { inputLim.focus(); return; }
     }
+    const nombre = info.tienda.nombre; // sin cambios: el nombre solo se toca desde Configuración tiendas
     cerrarModal();
     const mutar = function () {
       const infoActual = buscarTiendaPlantilla_(row);
-      if (infoActual) { infoActual.tienda.nombre = nombre; infoActual.tienda.limite = Number(limite); }
+      if (infoActual) {
+        infoActual.tienda.limiteOverride = usaLimitePropio;
+        infoActual.tienda.limite = usaLimitePropio ? Number(limite) : infoActual.tienda.limiteGeneral;
+      }
     };
-    guardarPlantillaOptimista_(mutar, 'editarTiendaPlantilla', [PLANTILLA_ESTADO.dia, row, nombre, limite], 'Guardado',
-      function (resultado) {
-        const propagadas = (resultado && resultado.propagadas) || 0;
-        mostrarToast(propagadas > 0
-          ? 'Guardado (actualizado también en ' + propagadas + ' día(s) más donde aparecía)'
-          : 'Guardado');
-      });
+    guardarPlantillaOptimista_(mutar, 'editarTiendaPlantilla', [PLANTILLA_ESTADO.dia, row, nombre, limite], 'Guardado');
   };
-  setTimeout(function () { inputLim.focus(); }, 50);
+  setTimeout(function () { (inputNumero || inputNombre).focus(); }, 50);
 }
 
 function confirmarEliminarTiendaPlantilla_(row) {
@@ -863,7 +849,37 @@ function mostrarModalEliminarTiendaVariosDias_(row, dias) {
   document.getElementById('modal-borrar-todos-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantillaTodosDias_(row); };
 }
 
-function eliminarTiendaPlantilla_(row) {
+/** Modal con 2 opciones cuando la tienda que se va a borrar tiene
+ *  conteos guardados de días anteriores: borrarlos también (se pierden
+ *  para siempre) o conservarlos (la tienda se oculta de la plantilla,
+ *  pero su histórico sigue intacto y consultable en esos días). */
+function mostrarModalEliminarTiendaConHistorico_(row, nConteos) {
+  document.getElementById('modal-box').classList.remove('ancho');
+  document.getElementById('modal-box').classList.remove('usuario-form');
+  document.getElementById('modal-box').classList.add('medio');
+  document.getElementById('modal-box').classList.remove('peligro');
+  document.getElementById('modal-title').style.display = '';
+  document.getElementById('modal-title').textContent = 'Esta tienda tiene conteos guardados';
+  document.getElementById('modal-text').style.display = 'none';
+  document.getElementById('modal-textarea').style.display = 'none';
+
+  const custom = document.getElementById('modal-custom');
+  custom.style.display = 'block';
+  custom.innerHTML =
+    '<p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Esta tienda tiene ' + nConteos + ' conteo(s) guardado(s) de días anteriores. ¿Qué quieres hacer con ese histórico?</p>';
+
+  const actions = document.getElementById('modal-actions');
+  actions.innerHTML =
+    '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
+    '<button class="modal-confirm" id="modal-conservar-btn">Conservar histórico (ocultar tienda)</button>' +
+    '<button class="modal-confirm danger" id="modal-borrar-hist-btn">Borrar también el histórico</button>';
+  document.getElementById('modal-overlay').style.display = 'flex';
+  document.getElementById('modal-cancel-btn').onclick = cerrarModal;
+  document.getElementById('modal-conservar-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantilla_(row, 'conservar_historico'); };
+  document.getElementById('modal-borrar-hist-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantilla_(row, 'borrar_historico'); };
+}
+
+function eliminarTiendaPlantilla_(row, modo) {
   row = Number(row);
   const mutar = function () {
     const info = buscarTiendaPlantilla_(row);
@@ -871,7 +887,16 @@ function eliminarTiendaPlantilla_(row) {
     info.seccion.tiendas.splice(info.seccion.tiendas.indexOf(info.tienda), 1);
     desplazarRowsPlantillaDesde_(row + 1, -1);
   };
-  guardarPlantillaOptimista_(mutar, 'eliminarTiendaPlantilla', [PLANTILLA_ESTADO.dia, row], 'Eliminada');
+  guardarPlantillaOptimista_(mutar, 'eliminarTiendaPlantilla', [PLANTILLA_ESTADO.dia, row, modo || null], 'Eliminada', null,
+    function (err) {
+      const m = err && err.message ? err.message : '';
+      const match = /^REQUIERE_ELECCION_HISTORICO:(\d+)/.exec(m);
+      if (match) {
+        mostrarModalEliminarTiendaConHistorico_(row, Number(match[1]));
+        return true; // ya gestionado: no mostrar el toast de error genérico
+      }
+      return false;
+    });
 }
 
 /** Borra esta tienda de golpe en TODOS los días donde aparezca (misma
@@ -882,8 +907,18 @@ function eliminarTiendaPlantillaTodosDias_(row) {
   row = Number(row);
   llamarApi_('eliminarTiendaPlantillaTodosDias', [PLANTILLA_ESTADO.dia, row])
     .then(function (resultado) {
-      const eliminadas = (resultado && resultado.eliminadas) || 1;
-      mostrarToast('Eliminada de ' + eliminadas + ' día(s)');
+      const eliminadas = (resultado && resultado.eliminadas) || 0;
+      const ocultadas = (resultado && resultado.ocultadas) || 0;
+      let mensaje;
+      if (ocultadas > 0) {
+        // Alguna(s) aparición(es) tenía(n) conteos guardados: no se han
+        // borrado, solo se han ocultado (para conservar ese histórico).
+        mensaje = 'Eliminada de ' + eliminadas + ' día(s)' +
+          (ocultadas > 0 ? ', y ocultada (por tener histórico) en ' + ocultadas + ' día(s) más' : '');
+      } else {
+        mensaje = 'Eliminada de ' + eliminadas + ' día(s)';
+      }
+      mostrarToast(mensaje);
       cargarPlantilla_({ silencioso: true });
     })
     .catch(mostrarErrorServidor);
@@ -1466,44 +1501,64 @@ function abrirModalGruposLimitePlantilla_(nombreRuta) {
   document.getElementById('modal-overlay').style.display = 'flex';
 }
 
+/** "Añadir tienda" desde Rutas y tiendas ya NO crea tiendas nuevas -- eso
+ *  solo se puede hacer desde Configuración tiendas (abrirModalNuevaTiendaConfig_
+ *  en tiendas.js), para que una tienda tenga siempre una única ficha con
+ *  su email/tránsito/límite general, en vez de poder nacer "al vuelo" con
+ *  datos sueltos como antes. Aquí solo se elige, de entre las tiendas que
+ *  ya existen en Configuración tiendas, cuál asignar a esta ruta/día. */
 function abrirModalAnadirTiendaPlantilla_(nombreRuta) {
   // Antes de pintar el modal, se comprueba si esta misma ruta (misma
   // "agrupación", p.ej. "TXT ANDORRA") existe también otros días, para
-  // poder ofrecer añadir la tienda nueva de golpe en esos días también.
-  llamarApi_('diasRutaMismoNombre', [PLANTILLA_ESTADO.dia, nombreRuta])
-    .then(function (dias) { pintarModalAnadirTiendaPlantilla_(nombreRuta, dias || []); })
-    .catch(function () { pintarModalAnadirTiendaPlantilla_(nombreRuta, []); });
+  // poder ofrecer añadir la tienda de golpe en esos días también, y se
+  // trae la lista de tiendas ya existentes en Configuración tiendas.
+  Promise.all([
+    llamarApi_('diasRutaMismoNombre', [PLANTILLA_ESTADO.dia, nombreRuta]).catch(function () { return []; }),
+    llamarApi_('getTiendasConfig', []).catch(function () { return []; })
+  ]).then(function (resultados) {
+    pintarModalAnadirTiendaPlantilla_(nombreRuta, resultados[0] || [], resultados[1] || []);
+  });
 }
 
-function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
-  document.getElementById('modal-box').classList.remove('ancho');
+function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias, tiendasConfig) {
   document.getElementById('modal-box').classList.remove('medio');
+  document.getElementById('modal-box').classList.add('ancho');
   document.getElementById('modal-box').classList.remove('peligro');
   document.getElementById('modal-box').classList.remove('usuario-form');
   document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Añadir tienda';
+  document.getElementById('modal-title').textContent = 'Añadir tienda a "' + nombreRuta + '"';
   document.getElementById('modal-text').style.display = 'none';
   document.getElementById('modal-textarea').style.display = 'none';
+
+  // Solo se ofrecen tiendas que todavía no aparezcan hoy (PLANTILLA_ESTADO.dia)
+  // en ninguna ruta -- el backend vuelve a comprobarlo al guardar (por si
+  // ha cambiado algo entre medias), esto es solo para no ofrecer de
+  // entrada algo que se sabe que va a fallar.
+  const candidatas = tiendasConfig
+    .filter(function (t) { return (t.diasConteo || []).indexOf(PLANTILLA_ESTADO.dia) === -1; })
+    .sort(function (a, b) { return a.tienda.localeCompare(b.tienda); });
+
+  let seleccionada = null;
 
   const custom = document.getElementById('modal-custom');
   custom.style.display = 'block';
   custom.innerHTML =
     '<div class="modal-campo">' +
-      '<label for="modal-plantilla-lim">Límite de palets diarios</label>' +
-      '<input type="text" id="modal-plantilla-lim" inputmode="numeric" placeholder="Ej: 6">' +
+      '<label for="modal-plantilla-buscar">Tienda</label>' +
+      '<input type="text" id="modal-plantilla-buscar" placeholder="Buscar por número o nombre…">' +
+      '<div class="modal-plantilla-lista-tiendas" id="modal-plantilla-lista-tiendas"></div>' +
+      '<p class="modal-campo-ayuda" id="modal-plantilla-sin-tienda" style="display:none;">' +
+        '¿No aparece la tienda que buscas? <button type="button" class="modal-link-btn" id="modal-plantilla-ir-config">Créala primero en Configuración tiendas</button>.' +
+      '</p>' +
     '</div>' +
     '<div class="modal-campo">' +
-      '<label for="modal-plantilla-numero">Número de tienda (3 dígitos)</label>' +
-      '<input type="text" id="modal-plantilla-numero" inputmode="numeric" maxlength="3" placeholder="Ej: 062">' +
-    '</div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-plantilla-nombre-tienda">Nombre de la tienda</label>' +
-      '<input type="text" id="modal-plantilla-nombre-tienda" style="text-transform:uppercase;" placeholder="Ej: ISLAZUL">' +
-      '<span class="modal-campo-ayuda">Se guardará como "<span id="modal-plantilla-preview">000 - …</span>", igual que el resto de tiendas.</span>' +
+      '<label for="modal-plantilla-lim">Límite de palets para este día (opcional)</label>' +
+      '<input type="text" id="modal-plantilla-lim" inputmode="numeric" placeholder="Vacío = usa el límite general de la tienda">' +
+      '<span class="modal-campo-ayuda" id="modal-plantilla-lim-general"></span>' +
     '</div>' +
     (otrosDias.length
       ? '<div class="modal-campo">' +
-          '<label>"' + escapeHtml(nombreRuta) + '" también existe en estos días. ¿Añadir la tienda ahí también?</label>' +
+          '<label>"' + escapeHtml(nombreRuta) + '" también existe en estos días. ¿Añadirla ahí también?</label>' +
           '<div class="modal-anadir-tienda-dias">' +
             otrosDias.map(function (d) {
               return '<button type="button" class="modal-anadir-tienda-dia-pill" data-dia="' + escapeAttr(d) + '">' +
@@ -1518,29 +1573,48 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
     pill.onclick = function () { pill.classList.toggle('activo'); };
   });
 
-  // El número solo admite dígitos (máx. 3) y el nombre se fuerza a
-  // mayúsculas mientras se escribe -- así el operario no puede dejar el
-  // nombre a medio formatear ni mezclar mayúsculas/minúsculas, que es lo
-  // que hacía que la misma tienda acabase con dos formatos distintos.
-  const inputNumero = document.getElementById('modal-plantilla-numero');
-  const inputNombreTienda = document.getElementById('modal-plantilla-nombre-tienda');
-  const preview = document.getElementById('modal-plantilla-preview');
-  const actualizarPreview_ = function () {
-    const num = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-    const nom = inputNombreTienda.value.trim().replace(/\s+/g, ' ');
-    preview.textContent = (num ? num.padStart(3, '0') : '000') + ' - ' + (nom || '…');
+  const listaEl = document.getElementById('modal-plantilla-lista-tiendas');
+  const avisoSinTienda = document.getElementById('modal-plantilla-sin-tienda');
+  const limGeneralHint = document.getElementById('modal-plantilla-lim-general');
+  document.getElementById('modal-plantilla-ir-config').onclick = function () {
+    cerrarModal();
+    cambiarVista('configuracion', 'tiendas');
   };
-  inputNumero.oninput = function () {
-    inputNumero.value = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-    actualizarPreview_();
-  };
-  inputNombreTienda.oninput = function () {
-    const pos = inputNombreTienda.selectionStart;
-    inputNombreTienda.value = inputNombreTienda.value.toUpperCase();
-    inputNombreTienda.setSelectionRange(pos, pos);
-    actualizarPreview_();
-  };
-  actualizarPreview_();
+
+  function pintarLista(filtro) {
+    const f = (filtro || '').trim().toLowerCase();
+    const items = f ? candidatas.filter(function (t) { return t.tienda.toLowerCase().indexOf(f) !== -1; }) : candidatas;
+    if (!items.length) {
+      listaEl.innerHTML = '<div class="modal-plantilla-tienda-vacio">Ninguna tienda coincide.</div>';
+      avisoSinTienda.style.display = '';
+      return;
+    }
+    avisoSinTienda.style.display = candidatas.length ? 'none' : '';
+    listaEl.innerHTML = items.map(function (t) {
+      const marcada = t.tienda === seleccionada;
+      const esSinUso = /^SIN USO/i.test(t.estado || '');
+      return '<button type="button" class="modal-plantilla-tienda-item' + (marcada ? ' activa' : '') + '" data-clave="' + escapeAttr(t.tienda) + '" data-limite="' + escapeAttr(t.limite != null ? t.limite : '') + '">' +
+        '<span>' + escapeHtml(t.tienda) + '</span>' +
+        (esSinUso ? '<span class="modal-plantilla-tienda-badge">sin uso</span>' : '') +
+      '</button>';
+    }).join('');
+    listaEl.querySelectorAll('[data-clave]').forEach(function (btn) {
+      btn.onclick = function () {
+        seleccionada = btn.getAttribute('data-clave');
+        const limGeneral = btn.getAttribute('data-limite');
+        limGeneralHint.textContent = limGeneral ? ('Límite general de esta tienda: ' + limGeneral) : 'Esta tienda todavía no tiene límite general definido.';
+        listaEl.querySelectorAll('[data-clave]').forEach(function (b) { b.classList.toggle('activa', b === btn); });
+      };
+    });
+  }
+  pintarLista('');
+
+  let temporizadorBusqueda = null;
+  document.getElementById('modal-plantilla-buscar').addEventListener('input', function (e) {
+    clearTimeout(temporizadorBusqueda);
+    const valor = e.target.value;
+    temporizadorBusqueda = setTimeout(function () { pintarLista(valor); }, 150);
+  });
 
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
@@ -1549,18 +1623,10 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
   document.getElementById('modal-confirm-btn').onclick = function () {
+    if (!seleccionada) { mostrarToast('Elige primero qué tienda añadir', true); return; }
     const inputLim = document.getElementById('modal-plantilla-lim');
     const limite = inputLim.value.trim();
-    if (limite === '' || isNaN(Number(limite))) { inputLim.focus(); return; }
-    const numero = inputNumero.value.replace(/\D/g, '').slice(0, 3);
-    if (!numero) { inputNumero.focus(); return; }
-    const nombreTienda = inputNombreTienda.value.trim().replace(/\s+/g, ' ').toUpperCase();
-    if (!nombreTienda) { inputNombreTienda.focus(); return; }
-    // Número siempre a 3 dígitos (rellena con ceros a la izquierda si se
-    // han escrito solo 1 o 2), y nombre siempre en mayúsculas con un
-    // único espacio de separación -- así el formato final es idéntico
-    // pase lo que pase por lo que se haya escrito.
-    const nombre = numero.padStart(3, '0') + ' - ' + nombreTienda;
+    if (limite !== '' && isNaN(Number(limite))) { inputLim.focus(); return; }
     const diasElegidos = Array.prototype.slice.call(document.querySelectorAll('.modal-anadir-tienda-dia-pill.activo'))
       .map(function (pill) { return pill.getAttribute('data-dia'); });
 
@@ -1575,13 +1641,12 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
     // en cualquier agrupación -- si pasa, se deja el modal ABIERTO con
     // los datos escritos y se muestra el motivo, en vez de cerrarlo y
     // perder lo escrito.
-    llamarApi_('añadirTiendaPlantilla', [PLANTILLA_ESTADO.dia, nombreRuta, nombre, limite])
+    llamarApi_('asignarTiendaExistentePlantilla', [PLANTILLA_ESTADO.dia, nombreRuta, seleccionada, limite])
       .then(function () {
         cerrarModal();
         cargarPlantilla_({ silencioso: true });
         if (!diasElegidos.length) {
           mostrarToast('Tienda añadida');
-          abrirModalConfigurarTiendaNueva_(nombre);
           return;
         }
         // El día principal ya está añadido; los demás días marcados se
@@ -1590,7 +1655,7 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
         // cuáles no se han podido añadir y por qué.
         Promise.allSettled(
           diasElegidos.map(function (dia) {
-            return llamarApi_('añadirTiendaPlantilla', [dia, nombreRuta, nombre, limite]);
+            return llamarApi_('asignarTiendaExistentePlantilla', [dia, nombreRuta, seleccionada, limite]);
           })
         ).then(function (resultados) {
           const fallos = resultados
@@ -1605,7 +1670,6 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
           } else {
             mostrarToast('Tienda añadida (también en ' + diasElegidos.length + ' día(s) más)');
           }
-          abrirModalConfigurarTiendaNueva_(nombre);
         });
       })
       .catch(function (err) {
@@ -1618,73 +1682,7 @@ function pintarModalAnadirTiendaPlantilla_(nombreRuta, otrosDias) {
         document.getElementById('modal-custom').appendChild(aviso);
       });
   };
-  setTimeout(function () { inputNumero.focus(); }, 50);
-}
-
-/** Tras crear una tienda nueva, pregunta de una vez email, notas y
- *  tránsito -- los MISMOS datos que se rellenan en "Configuración
- *  tiendas" (guardarEmailTienda + guardarTransitoTienda) -- en vez de
- *  obligar a ir a esa pantalla aparte a buscarla y pulsar "Sincronizar".
- *  Así no hay riesgo de olvidarse y dejar la tienda a medio configurar.
- *  Si no se sabe nada todavía, "No configurar ahora" cierra el modal sin
- *  guardar nada -- se puede rellenar más tarde desde Configuración
- *  tiendas con normalidad (ahí seguirá apareciendo como "Nueva -- falta
- *  añadir email" hasta que se rellene). */
-function abrirModalConfigurarTiendaNueva_(nombreTienda) {
-  document.getElementById('modal-box').classList.remove('ancho');
-  document.getElementById('modal-box').classList.remove('medio');
-  document.getElementById('modal-box').classList.remove('peligro');
-  document.getElementById('modal-box').classList.remove('usuario-form');
-  document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Configurar "' + nombreTienda + '"';
-  document.getElementById('modal-text').style.display = 'none';
-  document.getElementById('modal-textarea').style.display = 'none';
-
-  const custom = document.getElementById('modal-custom');
-  custom.style.display = 'block';
-  custom.innerHTML =
-    '<p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Mismos datos que en "Configuración tiendas": el email se usa para avisar a la tienda de los palets que va a recibir. Si no los sabes todavía, puedes dejarlo para más tarde.</p>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-config-tienda-email">Email</label>' +
-      '<input type="email" id="modal-config-tienda-email" placeholder="tienda@ejemplo.com">' +
-    '</div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-config-tienda-notas">Notas</label>' +
-      '<input type="text" id="modal-config-tienda-notas" placeholder="Notas libres (opcional)">' +
-    '</div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-config-tienda-transito">Tránsito</label>' +
-      '<select id="modal-config-tienda-transito">' +
-        TRANSITO_OPCIONES.map(function (op) {
-          return '<option value="' + op.valor + '"' + (op.valor === 1 ? ' selected' : '') + '>' + op.texto + '</option>';
-        }).join('') +
-      '</select>' +
-    '</div>';
-
-  const actions = document.getElementById('modal-actions');
-  actions.innerHTML =
-    '<button class="modal-cancel" id="modal-no-configurar-btn">No configurar ahora</button>' +
-    '<button class="modal-confirm" id="modal-guardar-config-tienda-btn">Guardar</button>';
-  document.getElementById('modal-overlay').style.display = 'flex';
-  document.getElementById('modal-no-configurar-btn').onclick = cerrarModal;
-  document.getElementById('modal-guardar-config-tienda-btn').onclick = function () {
-    const email = document.getElementById('modal-config-tienda-email').value.trim();
-    const notas = document.getElementById('modal-config-tienda-notas').value.trim();
-    const transito = Number(document.getElementById('modal-config-tienda-transito').value);
-    cerrarModal();
-    // Se guardan siempre los dos (aunque email/notas se hayan dejado en
-    // blanco), para que la fila de config_tiendas quede creada de una vez
-    // -- así, aunque no se sepa el email todavía, la tienda ya no
-    // aparecerá como huérfana en "Configuración tiendas" hasta que
-    // alguien pulse "Sincronizar" a mano.
-    Promise.all([
-      llamarApi_('guardarEmailTienda', [nombreTienda, email, notas]),
-      llamarApi_('guardarTransitoTienda', [nombreTienda, transito])
-    ])
-      .then(function () { mostrarToast('Tienda configurada'); })
-      .catch(mostrarErrorServidor);
-  };
-  setTimeout(function () { document.getElementById('modal-config-tienda-email').focus(); }, 50);
+  setTimeout(function () { document.getElementById('modal-plantilla-buscar').focus(); }, 50);
 }
 
 /** Si el nombre de una agrupación sigue el formato habitual
@@ -1705,10 +1703,21 @@ function dividirNombreRutaPlantilla_(nombreCompleto) {
   return { nombre: nombre, ubicacion: contenido, hora: '' };
 }
 
-/** Lápiz junto al nombre de una agrupación: abre un modal para editar el
- *  nombre, la ubicación de carga y la hora de carga por separado, en vez
- *  de tener que reescribir la línea completa "NOMBRE (UBICACION HORA)" a
- *  mano -- mismo formato que ya usa "Añadir ruta nueva". */
+/** Lápiz junto al nombre de una agrupación: abre un modal para editar SOLO
+ *  la ubicación y la hora de carga, en vez de tener que reescribir la
+ *  línea completa "NOMBRE (UBICACION HORA)" a mano -- mismo formato que ya
+ *  usa "Añadir ruta nueva".
+ *
+ *  El nombre de la agrupación (la parte antes del paréntesis) ya NO se
+ *  puede tocar desde aquí: es la misma identidad que la agrupación tiene
+ *  en Configuración agencias (Config_Agrupaciones), de donde sale su
+ *  clave y sus emails de agencia. El RPC editarNombreRutaPlantilla solo
+ *  actualiza la tabla "rutas" (nombre + clave) y no toca
+ *  config_agrupaciones, así que si se dejara cambiar el nombre aquí la
+ *  ruta podría acabar con una clave que ya no coincide con ninguna
+ *  agrupación configurada (mismo riesgo de desincronización que tenía el
+ *  lápiz de "Editar tienda" con el número/nombre de tienda). Por eso este
+ *  modal siempre reenvía el nombre de agrupación tal cual estaba. */
 function abrirModalEditarRutaPlantilla_(nombreActual) {
   const partes = dividirNombreRutaPlantilla_(nombreActual);
 
@@ -1717,7 +1726,7 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
   document.getElementById('modal-box').classList.remove('peligro');
   document.getElementById('modal-box').classList.remove('usuario-form');
   document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Editar ruta';
+  document.getElementById('modal-title').textContent = 'Ubicación y hora de carga — ' + partes.nombre;
   document.getElementById('modal-text').style.display = 'none';
   document.getElementById('modal-textarea').style.display = 'none';
 
@@ -1725,17 +1734,14 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
   custom.style.display = 'block';
   custom.innerHTML =
     '<div class="modal-campo">' +
-      '<label for="modal-ruta-nombre">Nombre de la ruta</label>' +
-      '<input type="text" id="modal-ruta-nombre" value="' + escapeAttr(partes.nombre) + '" placeholder="Ej: PRUEBA">' +
-    '</div>' +
-    '<div class="modal-campo">' +
       '<label for="modal-ruta-ubicacion">Ubicación de carga</label>' +
       '<input type="text" id="modal-ruta-ubicacion" value="' + escapeAttr(partes.ubicacion) + '" placeholder="Ej: GAITE">' +
     '</div>' +
     '<div class="modal-campo">' +
       '<label for="modal-ruta-hora">Hora de carga</label>' +
       '<input type="text" id="modal-ruta-hora" value="' + escapeAttr(partes.hora) + '" placeholder="Ej: 10:00 (déjalo en blanco si no aplica)">' +
-    '</div>';
+    '</div>' +
+    '<p class="modal-campo-ayuda">El nombre de la agrupación ("' + escapeHtml(partes.nombre) + '") no se puede cambiar aquí: sale de Configuración agencias.</p>';
 
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
@@ -1744,19 +1750,17 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
   document.getElementById('modal-confirm-btn').onclick = function () {
-    const inputNombre = document.getElementById('modal-ruta-nombre');
     const inputUbicacion = document.getElementById('modal-ruta-ubicacion');
     const inputHora = document.getElementById('modal-ruta-hora');
-    const nombre = inputNombre.value.trim();
     const ubicacion = inputUbicacion.value.trim();
     const hora = inputHora.value.trim();
-    if (!nombre) { inputNombre.focus(); return; }
     if (!ubicacion) { inputUbicacion.focus(); return; }
 
     // Mismo formato que "Añadir ruta nueva": "NOMBRE (UBICACION HORA)",
     // o "NOMBRE (UBICACION)" si se deja la hora en blanco (hay rutas
-    // reales sin una hora fija, p.ej. "CBL MALAGA (AMBAS NAVES)").
-    const nombreCompleto = nombre + ' (' + ubicacion + (hora ? ' ' + hora : '') + ')';
+    // reales sin una hora fija, p.ej. "CBL MALAGA (AMBAS NAVES)"). El
+    // nombre de la agrupación se reenvía siempre igual (partes.nombre).
+    const nombreCompleto = partes.nombre + ' (' + ubicacion + (hora ? ' ' + hora : '') + ')';
     cerrarModal();
     const mutar = function () {
       const s = PLANTILLA_ESTADO.secciones.find(function (s) { return s.nombre === nombreActual; });
@@ -1764,7 +1768,7 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
     };
     guardarPlantillaOptimista_(mutar, 'editarNombreRutaPlantilla', [PLANTILLA_ESTADO.dia, nombreActual, nombreCompleto], 'Ruta actualizada');
   };
-  setTimeout(function () { document.getElementById('modal-ruta-nombre').focus(); }, 50);
+  setTimeout(function () { document.getElementById('modal-ruta-ubicacion').focus(); }, 50);
 }
 
 function confirmarEliminarRutaPlantilla_(nombreRuta) {
@@ -1784,6 +1788,29 @@ function eliminarRutaPlantilla_(nombreRuta) {
     .catch(mostrarErrorServidor);
 }
 
+/** Misma normalización que la función SQL "_clave_agrupacion" del backend:
+ *  quita cualquier paréntesis "(...)" (ubicación/hora), pasa a mayúsculas,
+ *  recorta y colapsa espacios. Se usa aquí SOLO para comparar contra las
+ *  agrupaciones ya usadas como ruta en el día actual (PLANTILLA_ESTADO.secciones)
+ *  y así no ofrecerlas otra vez en el desplegable -- el backend vuelve a
+ *  aplicar la misma regla (y la exige) al guardar, así que esto es solo
+ *  para que la lista del desplegable ya venga filtrada. */
+function claveAgrupacionJs_(nombre) {
+  let s = String(nombre || '').replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  s = s.toUpperCase();
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
+/** "Añadir ruta nueva" ya NO deja escribir el nombre de la ruta a mano:
+ *  solo se puede elegir entre las agrupaciones ya dadas de alta en
+ *  "Configuración agencias" (Config_Agrupaciones) que todavía no se estén
+ *  usando como ruta en este día -- igual que renombrar/crear una tienda
+ *  solo se puede hacer desde Configuración tiendas. Si la agrupación que
+ *  hace falta todavía no existe, hay que crearla primero ahí (botón
+ *  "Nueva agencia"); el backend (añadir_ruta_plantilla) también rechaza
+ *  ahora cualquier clave que no exista en Config_Agrupaciones, así que
+ *  esto es defensa en profundidad además de guiar al usuario. */
 function anadirRutaPlantilla_() {
   document.getElementById('modal-box').classList.remove('ancho');
   document.getElementById('modal-box').classList.remove('medio');
@@ -1798,46 +1825,87 @@ function anadirRutaPlantilla_() {
   custom.style.display = 'block';
   custom.innerHTML =
     '<div class="modal-dia-aviso">Se creará en <strong>' + escapeHtml(PLANTILLA_ESTADO.dia || '') + '</strong></div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-ruta-nombre">Nombre de la ruta</label>' +
-      '<input type="text" id="modal-ruta-nombre" placeholder="Ej: PRUEBA">' +
-    '</div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-ruta-ubicacion">Ubicación de carga</label>' +
-      '<input type="text" id="modal-ruta-ubicacion" placeholder="Ej: GAITE">' +
-    '</div>' +
-    '<div class="modal-campo">' +
-      '<label for="modal-ruta-hora">Hora de carga</label>' +
-      '<input type="text" id="modal-ruta-hora" placeholder="Ej: 10:00">' +
-    '</div>';
+    '<div class="loader">Cargando agrupaciones disponibles…</div>';
 
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
     '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
-    '<button class="modal-confirm" id="modal-confirm-btn">Guardar</button>';
+    '<button class="modal-confirm" id="modal-confirm-btn" disabled>Guardar</button>';
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
-  document.getElementById('modal-confirm-btn').onclick = function () {
-    const inputNombre = document.getElementById('modal-ruta-nombre');
-    const inputUbicacion = document.getElementById('modal-ruta-ubicacion');
-    const inputHora = document.getElementById('modal-ruta-hora');
-    const nombre = inputNombre.value.trim();
-    const ubicacion = inputUbicacion.value.trim();
-    const hora = inputHora.value.trim();
-    if (!nombre) { inputNombre.focus(); return; }
-    if (!ubicacion) { inputUbicacion.focus(); return; }
-    if (!hora) { inputHora.focus(); return; }
 
-    const nombreCompleto = nombre + ' (' + ubicacion + ' ' + hora + ')';
-    cerrarModal();
-    // Inserta un bloque de filas nuevo -- el backend decide dónde queda,
-    // así que hace falta volver a pedir la plantilla; modo "silencioso"
-    // (sin loader ni salto de scroll).
-    llamarApi_('añadirRutaPlantilla', [PLANTILLA_ESTADO.dia, nombreCompleto])
-      .then(function () { mostrarToast('Ruta añadida'); cargarPlantilla_({ silencioso: true }); })
-      .catch(mostrarErrorServidor);
-  };
-  setTimeout(function () { document.getElementById('modal-ruta-nombre').focus(); }, 50);
+  llamarApi_('getAgrupacionesConfig', [])
+    .then(function (todas) {
+      // Puede que el modal se haya cerrado mientras llegaba la respuesta.
+      if (document.getElementById('modal-overlay').style.display === 'none') return;
+
+      const clavesUsadasHoy = {};
+      PLANTILLA_ESTADO.secciones.forEach(function (s) {
+        clavesUsadasHoy[claveAgrupacionJs_(s.nombre)] = true;
+      });
+      const disponibles = (todas || [])
+        .filter(function (it) { return !clavesUsadasHoy[claveAgrupacionJs_(it.agrupacion)]; })
+        .sort(function (a, b) { return a.agrupacion.localeCompare(b.agrupacion, 'es'); });
+
+      if (!disponibles.length) {
+        custom.innerHTML =
+          '<div class="modal-dia-aviso">Se creará en <strong>' + escapeHtml(PLANTILLA_ESTADO.dia || '') + '</strong></div>' +
+          '<p class="modal-campo-ayuda">Todas las agrupaciones ya dadas de alta en Configuración agencias se están usando hoy en ' + escapeHtml(PLANTILLA_ESTADO.dia || 'este día') + ', o todavía no hay ninguna. Crea una agencia nueva desde "Configuración agencias" (botón "Nueva agencia") y luego vuelve aquí para añadirla como ruta.</p>';
+        return;
+      }
+
+      custom.innerHTML =
+        '<div class="modal-dia-aviso">Se creará en <strong>' + escapeHtml(PLANTILLA_ESTADO.dia || '') + '</strong></div>' +
+        '<div class="modal-campo">' +
+          '<label for="modal-ruta-agrupacion">Agrupación</label>' +
+          '<select id="modal-ruta-agrupacion">' +
+            '<option value="">Selecciona…</option>' +
+            disponibles.map(function (it) {
+              return '<option value="' + escapeAttr(it.agrupacion) + '">' + escapeHtml(it.agrupacion) + '</option>';
+            }).join('') +
+          '</select>' +
+          '<span class="modal-campo-ayuda">¿No está en la lista? Créala primero en "Configuración agencias" (botón "Nueva agencia").</span>' +
+        '</div>' +
+        '<div class="modal-campo">' +
+          '<label for="modal-ruta-ubicacion">Ubicación de carga</label>' +
+          '<input type="text" id="modal-ruta-ubicacion" placeholder="Ej: GAITE">' +
+        '</div>' +
+        '<div class="modal-campo">' +
+          '<label for="modal-ruta-hora">Hora de carga</label>' +
+          '<input type="text" id="modal-ruta-hora" placeholder="Ej: 10:00">' +
+        '</div>';
+
+      const btnConfirmar = document.getElementById('modal-confirm-btn');
+      btnConfirmar.disabled = false;
+      btnConfirmar.onclick = function () {
+        const selectAgrupacion = document.getElementById('modal-ruta-agrupacion');
+        const inputUbicacion = document.getElementById('modal-ruta-ubicacion');
+        const inputHora = document.getElementById('modal-ruta-hora');
+        const nombre = selectAgrupacion.value;
+        const ubicacion = inputUbicacion.value.trim();
+        const hora = inputHora.value.trim();
+        if (!nombre) { selectAgrupacion.focus(); return; }
+        if (!ubicacion) { inputUbicacion.focus(); return; }
+        if (!hora) { inputHora.focus(); return; }
+
+        const nombreCompleto = nombre + ' (' + ubicacion + ' ' + hora + ')';
+        cerrarModal();
+        // Inserta un bloque de filas nuevo -- el backend decide dónde queda,
+        // así que hace falta volver a pedir la plantilla; modo "silencioso"
+        // (sin loader ni salto de scroll).
+        llamarApi_('añadirRutaPlantilla', [PLANTILLA_ESTADO.dia, nombreCompleto])
+          .then(function () { mostrarToast('Ruta añadida'); cargarPlantilla_({ silencioso: true }); })
+          .catch(mostrarErrorServidor);
+      };
+      setTimeout(function () { document.getElementById('modal-ruta-agrupacion').focus(); }, 50);
+    })
+    .catch(function (err) {
+      if (document.getElementById('modal-overlay').style.display === 'none') return;
+      custom.innerHTML =
+        '<div class="modal-dia-aviso">Se creará en <strong>' + escapeHtml(PLANTILLA_ESTADO.dia || '') + '</strong></div>' +
+        '<p class="modal-campo-ayuda">No se ha podido cargar la lista de agrupaciones.</p>';
+      mostrarErrorServidor(err);
+    });
 }
 
 function renderShellPrincipal() {

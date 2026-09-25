@@ -1,5 +1,30 @@
 /* SALIDAS · js/conteos-filas.js — Conteos diarios: filas, celdas, cálculo/validación y recogerFilas */
 
+// Evita que la rueda del ratón cambie el número cuando el cursor está
+// encima de una casilla de conteo (comportamiento nativo del navegador en
+// los <input type="number"> enfocados, no deseado aquí). Un único listener
+// delegado en el documento, en captura y sin passive, para poder frenarlo;
+// no afecta al scroll normal de la página en el resto de la pantalla.
+document.addEventListener('wheel', function (e) {
+  const el = e.target;
+  if (el && el.tagName === 'INPUT' && el.type === 'number' && el.classList.contains('celda')) {
+    e.preventDefault();
+  }
+}, { passive: false, capture: true });
+
+/** Texto de la columna LÍMITE: el número si la tienda tiene uno
+ *  configurado (en Configuración tiendas o, si lo tiene, el propio de
+ *  ese día en Plantilla), o "NO" si no tiene límite. Se usa tanto para
+ *  la celda en pantalla como para el atributo data-limite (que leen la
+ *  validación de exceso, el modal de envío y los PDF/impresión) y para
+ *  la hoja de impresión manual (conteos-impresion.js) -- así "NO" sale
+ *  igual en todos los sitios en vez del "null" que salía antes cuando
+ *  la tienda no tenía límite.
+ */
+function textoLimite_(limite) {
+  return (limite == null || limite === '') ? 'NO' : limite;
+}
+
 /**
  * Celda de 60/PTA/CART. Si el valor es "NO", se muestra en rojo y no
  * editable (con un botón para forzar un número igualmente si hiciera
@@ -33,7 +58,7 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
   if (t.cerrada) {
     return '<tr class="fila-cerrada' + claseGrupo + '" data-row="' + t.row + '" data-nombre="' + escapeAttr(t.nombre) + '" data-cierre-id="' + escapeAttr(t.cierreId) + '"' + atrGrupo + '>' +
       '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
-      '<td class="limite">' + t.limite + '</td>' +
+      '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
       '<td colspan="' + (5 + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre">CERRADA — ' + escapeHtml(t.motivoCierre) + '</div></td>' +
       '<td><button type="button" class="btn-reabrir">Reabrir</button></td>' +
       '</tr>';
@@ -46,7 +71,7 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
   if (t.salePorExcepcion) {
     return '<tr class="fila-sale-excepcion' + claseGrupo + '" data-row="' + t.row + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + '>' +
       '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
-      '<td class="limite">' + t.limite + '</td>' +
+      '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
       '<td colspan="' + (5 + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre motivo-excepcion">POR EXCEPCIÓN SALE POR ' + escapeHtml(t.excepcionAgrupacionDestino || '') + '</div></td>' +
       '<td></td>' +
       '</tr>';
@@ -56,9 +81,9 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
   // desapercibida entre las tiendas de siempre de esta agrupación.
   const claseExcepcionEntrada = t.entraPorExcepcion ? ' fila-entra-excepcion' : '';
   const tituloEntrada = t.entraPorExcepcion ? ' title="Sale por aquí hoy por un cambio puntual (excepción), no es de esta agrupación habitualmente."' : '';
-  return '<tr class="' + (claseGrupo.trim() + claseExcepcionEntrada).trim() + '" data-row="' + t.row + '" data-limite="' + t.limite + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + tituloEntrada + '>' +
+  return '<tr class="' + (claseGrupo.trim() + claseExcepcionEntrada).trim() + '" data-row="' + t.row + '" data-limite="' + escapeAttr(textoLimite_(t.limite)) + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + tituloEntrada + '>' +
     '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
-    '<td class="limite">' + t.limite + '</td>' +
+    '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
     '<td>' + celdaConteoHtml('c60', t.c60, !!(t.forzados && t.forzados.c60 !== undefined)) + '</td>' +
     '<td>' + celdaConteoHtml('pta', t.pta, !!(t.forzados && t.forzados.pta !== undefined)) + '</td>' +
     '<td>' + celdaConteoHtml('cart', t.cart, !!(t.forzados && t.forzados.cart !== undefined)) + '</td>' +
@@ -95,9 +120,10 @@ function attachCalculoYValidacion(tr) {
 
   // recalcTotalVisual: solo actualiza lo que VE el usuario en la columna
   // TOTAL (real + PDTE). No toca totalInput (el real), así que no afecta
-  // ni al aviso de límite del camión, ni al contador de cabecera de la
-  // agrupación, ni a lo que se manda a la agencia en previsión/definitivo
-  // — esos siguen leyendo solo el campo "total" real, sin PDTE.
+  // al contador de cabecera de la agrupación ni a lo que se manda a la
+  // agencia en previsión/definitivo — esos siguen leyendo solo el campo
+  // "total" real, sin PDTE. El aviso de límite de esta fila (validar(),
+  // más abajo) sí suma el PDTE.
   function recalcTotalVisual() {
     if (!totalVisualInput) return;
     const real = totalInput.value === '' ? 0 : (parseFloat(totalInput.value) || 0);
@@ -132,7 +158,8 @@ function attachCalculoYValidacion(tr) {
     const total = parseFloat(totalInput.value);
     if (isNaN(total) || !limite) return;
 
-    const exceso = total - limite;
+    const pdte = (pdteInput && pdteInput.value !== '') ? (parseFloat(pdteInput.value) || 0) : 0;
+    const exceso = (total + pdte) - limite;
     if (exceso >= 3) {
       tr.classList.add('fila-alerta');
       nota.textContent = '+' + exceso + ' sobre el límite — consultar a informática';
@@ -149,7 +176,7 @@ function attachCalculoYValidacion(tr) {
   cartInput.addEventListener('input', recalcTotal);
   if (cexpressInput) cexpressInput.addEventListener('input', recalcTotal);
   if (sobrestockInput) sobrestockInput.addEventListener('input', recalcTotal);
-  if (pdteInput) pdteInput.addEventListener('input', recalcTotalVisual);
+  if (pdteInput) pdteInput.addEventListener('input', function () { validar(); recalcTotalVisual(); });
   validar();
   recalcTotalVisual();
 }

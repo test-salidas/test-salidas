@@ -127,6 +127,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     (editable && seccion.estado !== 'enviado'
       ? '<button type="button" class="btn-header-definitivo" title="Enviar definitivo por email (bloquea el conteo, lo archiva y vacía las casillas)">Enviar Definitivo</button>'
       : '') +
+    // "Enviar a informática" es un aviso interno: sigue disponible aunque
+    // ya se haya enviado el Definitivo (solo depende de la fecha, que el
+    // backend manda en seccion.puedeInformatica).
+    ((seccion.puedeInformatica !== undefined ? seccion.puedeInformatica : seccion.editable) !== false
+      ? '<button type="button" class="btn-header-informatica" title="Enviar la previsión de carga solo a transporte@primor.eu (no bloquea el conteo, se puede volver a enviar)">Enviar a informática</button>'
+      : '') +
     '</div>' +
     '<div class="seccion-header-extra">' +
     (editable && seccion.estado !== 'enviado'
@@ -272,6 +278,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   let hayCambiosSinGuardar = false;
   let haGuardadoAlMenosUnaVez = sumaInicialPalets > 0;
   let ultimoGuardadoEn = null; // Date del último guardado con éxito (esta sesión)
+  let timerAutoguardadoInactividad_ = null; // ver marcarCambiosSinGuardar_ / RESPALDO POR INACTIVIDAD más abajo
   function refrescarTextoUltimoGuardado_() {
     if (!spanUltimoGuardado || !spanUltimoGuardado.isConnected) return false;
     if (ultimoGuardadoEn) {
@@ -283,8 +290,11 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   REFRESCADORES_ULTIMO_GUARDADO_.push(refrescarTextoUltimoGuardado_);
   function actualizarBotonesEnvio_() {
     const bloquear = !haGuardadoAlMenosUnaVez || hayCambiosSinGuardar;
-    [header.querySelector('.btn-header-prevision'), header.querySelector('.btn-header-definitivo')].forEach(function (btn) {
+    [header.querySelector('.btn-header-prevision'), header.querySelector('.btn-header-definitivo'), header.querySelector('.btn-header-informatica')].forEach(function (btn) {
       if (!btn) return;
+      // Con el Definitivo ya enviado no hay nada que guardar: "Enviar a
+      // informática" se puede pulsar directamente.
+      if (seccion.estado === 'enviado' && btn.classList.contains('btn-header-informatica')) { btn.disabled = false; return; }
       if (!btn.hasAttribute('data-title-original')) btn.setAttribute('data-title-original', btn.title);
       btn.disabled = bloquear;
       btn.title = bloquear ? 'Pulsa antes "Guardar conteo"' : btn.getAttribute('data-title-original');
@@ -298,10 +308,23 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       btnGuardarConteo.textContent = 'Guardar conteo';
     }
     actualizarBotonesEnvio_();
+    // RESPALDO POR INACTIVIDAD: además de guardar al pulsar "Guardar
+    // conteo" o al salir de la tabla (ver "focusout" más abajo), si el
+    // usuario se queda 3 segundos sin tocar nada (ni escribe, ni hace
+    // clic en otro sitio) se guarda solo, por si se queda a medias sin
+    // hacer ninguna de las dos cosas. Cada pulsación reinicia el
+    // temporizador (debounce), así que mientras se sigue escribiendo no
+    // se dispara ningún guardado de más.
+    clearTimeout(timerAutoguardadoInactividad_);
+    timerAutoguardadoInactividad_ = setTimeout(function () {
+      if (!hayCambiosSinGuardar) return; // ya se guardó por otra vía mientras tanto
+      autoguardarSeccion();
+    }, 3000);
   }
   function marcarTodoGuardado_() {
     hayCambiosSinGuardar = false;
     haGuardadoAlMenosUnaVez = true;
+    clearTimeout(timerAutoguardadoInactividad_); // ya no hace falta el respaldo por inactividad: no queda nada pendiente
     if (btnGuardarConteo) {
       btnGuardarConteo.classList.remove('con-cambios');
       btnGuardarConteo.classList.add('sin-cambios');
@@ -468,6 +491,19 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     };
   }
 
+  const btnHeaderInformatica = header.querySelector('.btn-header-informatica');
+  if (btnHeaderInformatica) {
+    btnHeaderInformatica.onclick = function (e) {
+      e.stopPropagation();
+      // Requiere el permiso "Enviar a informática"
+      // (el backend lo vuelve a comprobar en enviar_informatica_agencia).
+      if (!tienePermiso('enviar_informatica')) { mostrarModalSinPermiso(); return; }
+      mostrarModalEnviarAgencia(calcularResumenEnvio(), function (callback) {
+        enviarSeccion('informatica', callback);
+      }, 'informatica');
+    };
+  }
+
   // Enlaza el click de "Deshacer envío" sobre el botón que se le pase: sirve
   // tanto para el que ya viniera en el HTML inicial del panel (si la página
   // se carga con la agrupación ya enviada hoy) como para el que se añade
@@ -563,17 +599,38 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   }
 
   function enviarSeccion(tipo, callback) {
+    // "Enviar a informática" con el Definitivo ya enviado: no hay nada que
+    // guardar (el conteo está archivado), se manda directamente.
+    if (tipo === 'informatica' && seccion.estado === 'enviado') {
+      const btnInf = header.querySelector('.btn-header-informatica');
+      if (btnInf) btnInf.disabled = true;
+      google.script.run
+        .withSuccessHandler(function () {
+          if (btnInf) btnInf.disabled = false;
+          if (callback) callback(true, 'Informática avisada correctamente');
+        })
+        .withFailureHandler(function (err) {
+          if (btnInf) btnInf.disabled = false;
+          if (callback) callback(false, (err && err.message) ? err.message : String(err));
+        })
+        .enviarInformaticaAgencia(dia, seccion.nombre, fecha);
+      return;
+    }
     if (!editable) { if (callback) callback(false, 'Esta agrupación ya no se puede modificar.'); return; }
     const btnPrevision = header.querySelector('.btn-header-prevision');
     const btnDefinitivo = header.querySelector('.btn-header-definitivo');
+    const btnInformatica = header.querySelector('.btn-header-informatica');
     if (btnPrevision) btnPrevision.disabled = true;
     if (btnDefinitivo) btnDefinitivo.disabled = true;
-    const metodo = tipo === 'definitivo' ? 'enviarDefinitivoAgencia' : 'enviarPrevisionAgencia';
+    if (btnInformatica) btnInformatica.disabled = true;
+    const metodo = tipo === 'definitivo' ? 'enviarDefinitivoAgencia'
+      : (tipo === 'informatica' ? 'enviarInformaticaAgencia' : 'enviarPrevisionAgencia');
     // Guarda inmediatamente (sin esperar el debounce) y, si todo va bien, envía.
     autoguardarSeccion(function (ok) {
       if (!ok) {
         if (btnPrevision) btnPrevision.disabled = false;
         if (btnDefinitivo) btnDefinitivo.disabled = false;
+        if (btnInformatica) btnInformatica.disabled = false;
         if (callback) callback(false, 'No se han podido guardar los datos. Inténtalo de nuevo.');
         return;
       }
@@ -581,6 +638,13 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         .withSuccessHandler(function (res) {
           if (btnPrevision) btnPrevision.disabled = false;
           if (btnDefinitivo) btnDefinitivo.disabled = false;
+          if (btnInformatica) btnInformatica.disabled = false;
+          // "Enviar a informática" no cambia nada en el panel (ni badges ni
+          // bloqueos): solo manda el email a transporte@primor.eu.
+          if (tipo === 'informatica') {
+            if (callback) callback(true, 'Informática avisada correctamente');
+            return;
+          }
           aplicarResultadoEnvio_(tipo, res);
           // El cuadrante (este panel) ya se ha actualizado en vivo, sin
           // recargar nada; solo se refresca el calendario mensual (ligero,
@@ -596,6 +660,7 @@ if (callback) callback(true, mensaje);
         .withFailureHandler(function (err) {
           if (btnPrevision) btnPrevision.disabled = false;
           if (btnDefinitivo) btnDefinitivo.disabled = false;
+          if (btnInformatica) btnInformatica.disabled = false;
           if (callback) callback(false, (err && err.message) ? err.message : String(err));
         })
         [metodo](dia, seccion.nombre, fecha);
@@ -625,7 +690,7 @@ if (callback) callback(true, mensaje);
       wrapTmp.innerHTML = badgePrevision(seccion);
       const nuevoBadge = wrapTmp.firstElementChild;
       if (nuevoBadge) {
-        const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo');
+        const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
         if (anclaBoton) anclaBoton.insertAdjacentElement('beforebegin', nuevoBadge);
         else header.appendChild(nuevoBadge);
       }
@@ -665,12 +730,14 @@ if (callback) callback(true, mensaje);
     if (btnPrevisionEl) btnPrevisionEl.remove();
     const btnDefinitivoEl = header.querySelector('.btn-header-definitivo');
     if (btnDefinitivoEl) btnDefinitivoEl.remove();
+    // "Enviar a informática" NO se quita: sigue disponible tras el definitivo.
+    actualizarBotonesEnvio_();
 
     if (esHoy && !header.querySelector('.btn-deshacer-envio')) {
       const wrapBtn = document.createElement('div');
       wrapBtn.innerHTML = htmlBotonDeshacerEnvio_();
       const nuevoBtn = wrapBtn.firstElementChild;
-      const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo');
+      const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
       if (anclaBoton) anclaBoton.insertAdjacentElement('beforebegin', nuevoBtn);
       else header.appendChild(nuevoBtn);
       bindBotonDeshacerEnvio_(nuevoBtn);
