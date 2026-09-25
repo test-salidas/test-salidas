@@ -490,6 +490,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
 
   /* ---------- VERIFICAR CONTEO (por nave) ---------- */
   if (!seccion.verificaciones) seccion.verificaciones = {};
+  if (!seccion.cambiosVerif) seccion.cambiosVerif = {};
 
   /** Tiendas de esta agrupación que tienen VACÍA la columna `campo` (sin
    *  contar cerradas, las que hoy salen por otra agrupación ni las
@@ -515,6 +516,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
    *  autorefresco lo repinte con lo que diga el servidor. */
   function quitarVerificacionLocal_(campo) {
     if (!campo || !seccion.verificaciones[campo]) return;
+    const ver = seccion.verificaciones[campo];
+    // Hasta que llegue el detalle real del servidor (siguiente
+    // autorefresco), se marca ya como "cambiado tras verificar".
+    if (!seccion.cambiosVerif[campo]) {
+      seccion.cambiosVerif[campo] = { verificadoPor: ver.nombre || ver.usuario || '', verificadoHora: ver.hora || '', modificadoPor: SESSION_USUARIO || '', hora: '', cambios: [] };
+    }
     delete seccion.verificaciones[campo];
     panel._firma = '';
     pintarVerificaciones_();
@@ -528,10 +535,26 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     if (pastillas) {
       pastillas.innerHTML = NAVES_CONTEO.map(function (n) {
         const ver = v[n.campo];
-        return ver
-          ? '<span class="verif-pastilla ok" title="' + escapeAttr(n.nave + ' verificado por ' + (ver.nombre || ver.usuario || '') + ' a las ' + (ver.hora || '')) + '">' + SVG_CHECK_VERIF_ + escapeHtml(n.etiqueta) + '</span>'
-          : '<span class="verif-pastilla" title="' + escapeAttr(n.nave + ': sin verificar') + '">' + escapeHtml(n.etiqueta) + '</span>';
+        const cam = !ver && seccion.cambiosVerif[n.campo];
+        if (ver) return '<span class="verif-pastilla ok" title="' + escapeAttr(n.nave + ' verificado por ' + (ver.nombre || ver.usuario || '') + ' a las ' + (ver.hora || '')) + '">' + SVG_CHECK_VERIF_ + escapeHtml(n.etiqueta) + '</span>';
+        if (cam) return '<span class="verif-pastilla modificada" title="' + escapeAttr(textoCambiosVerif_(n, cam)) + '">' + SVG_AVISO_VERIF_ + escapeHtml(n.etiqueta) + ' cambiado tras verificar</span>';
+        return '<span class="verif-pastilla" title="' + escapeAttr(n.nave + ': sin verificar') + '">' + escapeHtml(n.etiqueta) + '</span>';
       }).join('');
+    }
+    // Recuadro con el detalle de lo cambiado después de verificar.
+    let caja = panel.querySelector('.verif-cambios-caja');
+    const camposCambiados = NAVES_CONTEO.filter(function (n) { return !v[n.campo] && seccion.cambiosVerif[n.campo]; });
+    if (camposCambiados.length) {
+      if (!caja) {
+        caja = document.createElement('div');
+        caja.className = 'verif-cambios-caja';
+        header.insertAdjacentElement('afterend', caja);
+      }
+      caja.innerHTML = camposCambiados.map(function (n) {
+        return '<div class="verif-cambios-linea">' + SVG_AVISO_VERIF_ + '<span>' + escapeHtml(textoCambiosVerif_(n, seccion.cambiosVerif[n.campo])) + '</span></div>';
+      }).join('');
+    } else if (caja) {
+      caja.remove();
     }
     tableWrap.querySelectorAll('thead th[data-campo]').forEach(function (th) {
       th.classList.toggle('th-verificada', !!v[th.getAttribute('data-campo')]);
@@ -561,7 +584,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     }
     wrap.innerHTML =
       '<button type="button" class="btn-header-verificar" title="Verificar la columna ' + escapeAttr(n.etiqueta) + ' (' + escapeAttr(n.nave) + ')">' + SVG_CHECK_VERIF_ +
-      'Verificar conteo <span class="verif-chip">' + escapeHtml(n.etiqueta) + '</span></button>';
+      (seccion.cambiosVerif[campo] ? 'Volver a verificar' : 'Verificar conteo') + ' <span class="verif-chip">' + escapeHtml(n.etiqueta) + '</span></button>';
     wrap.querySelector('button').onclick = function (e) {
       e.stopPropagation();
       const vacias = vaciasDeCampo_(campo);
@@ -585,6 +608,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       llamarApi_('verificarConteo', [dia, seccion.nombre, fecha, campo])
         .then(function (res) {
           seccion.verificaciones[campo] = res || { nombre: SESSION_NOMBRE || SESSION_USUARIO, hora: '' };
+          delete seccion.cambiosVerif[campo];
           panel._firma = '';
           pintarVerificaciones_();
           mostrarToast(n.etiqueta + ' verificado en ' + parsearNombreAgrupacion(seccion.nombre).titulo);
@@ -623,16 +647,18 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const opciones = NAVES_CONTEO.map(function (n) {
       const ver = v[n.campo];
       const vacias = vaciasDeCampo_(n.campo).nombres.length;
+      const cam = !ver && seccion.cambiosVerif[n.campo];
       const detalle = ver
         ? 'Verificado por ' + (ver.nombre || ver.usuario || '') + ' a las ' + (ver.hora || '') + ' · elegir para volver a verificar'
-        : (vacias ? vacias + (vacias === 1 ? ' tienda vacía se pondrá a 0' : ' tiendas vacías se pondrán a 0') : 'Todas las tiendas tienen dato');
+        : (cam ? 'Cambiado después de verificar' + (cam.modificadoPor ? ' (' + cam.modificadoPor + ')' : '') + '. ' : '') +
+          (vacias ? vacias + (vacias === 1 ? ' tienda vacía se pondrá a 0' : ' tiendas vacías se pondrán a 0') : 'Todas las tiendas tienen dato');
       return '<div class="verif-opcion' + (ver ? ' es-verificada' : '') + '" data-campo="' + n.campo + '" role="button" tabindex="0">' +
           '<span class="verif-radio"></span>' +
           '<span class="verif-opcion-textos"><span class="verif-opcion-titulo">' + escapeHtml(n.nave) + ' · columna ' + escapeHtml(n.etiqueta) + '</span>' +
           '<span class="verif-opcion-detalle' + (!ver && vacias ? ' con-vacias' : '') + '">' + escapeHtml(detalle) + '</span></span>' +
           (ver
             ? '<span class="verif-estado ok">' + SVG_CHECK_VERIF_ + 'Verificado</span><button type="button" class="verif-btn-anular" data-anular="' + n.campo + '">Anular</button>'
-            : '<span class="verif-estado">Pendiente</span>') +
+            : (cam ? '<span class="verif-estado modificada">' + SVG_AVISO_VERIF_ + 'Cambiado</span>' : '<span class="verif-estado">Pendiente</span>')) +
         '</div>';
     }).join('');
 
@@ -994,6 +1020,23 @@ if (callback) callback(true, mensaje);
 /* ---------------- VERIFICAR CONTEO: helpers compartidos ---------------- */
 
 const SVG_CHECK_VERIF_ = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const SVG_AVISO_VERIF_ = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>';
+
+/** Número de conteo para los textos de cambios ("vacío" si no hay). */
+function numCambioVerif_(v) { return (v === null || v === undefined || v === '') ? 'vacío' : String(v); }
+
+/** Texto de un "cambio después de verificar" de una columna:
+ *  "60 verificado por jlopez (10:42). Después cambiado por admin2 (11:18):
+ *  MELILLA 3 → 5 · PARQUE CEUTA 0 → 2". */
+function textoCambiosVerif_(nave, cam) {
+  const lista = (cam.cambios || []).map(function (c) {
+    return quitarCodigoTienda(quitarMarcadorNombre(c.tienda || '')) + ' ' + numCambioVerif_(c.antes) + ' → ' + numCambioVerif_(c.despues);
+  });
+  return nave.etiqueta + ' estaba verificado' + (cam.verificadoPor ? ' por ' + cam.verificadoPor : '') + (cam.verificadoHora ? ' (' + cam.verificadoHora + ')' : '') +
+    '. Después lo cambió ' + (cam.modificadoPor || 'alguien') + (cam.hora ? ' (' + cam.hora + ')' : '') +
+    (lista.length ? ': ' + lista.join(' · ') : '') + '. Hay que volver a verificar.';
+}
+
 const SVG_CANDADO_NAVE_ = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
 /** <th> de 60 / PTA / CART.: con candado si el usuario no puede tocar esa

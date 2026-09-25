@@ -41,6 +41,7 @@ function intentarLogin() {
       SESSION_PERMISOS = resultado.permisos || {};
       SESSION_NAVE = resultado.nave || null;
       aplicarPermisosUI();
+      iniciarAvisosVerificacion_();
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       ajustarAlturaTopbar_();
