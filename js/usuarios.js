@@ -27,8 +27,8 @@ const CATALOGO_PERMISOS = [
     grupo: 'Gestión general',
     items: [
       { clave: 'notas', etiqueta: 'Notas y observaciones', desc: 'Añadir y quitar notas en la cuadrícula de conteos diarios.' },
-      { clave: 'cierres', etiqueta: 'Cerrar y reabrir tiendas', desc: 'Marcar tiendas como cerradas o reabrirlas en la cuadrícula de conteos.' },
-      { clave: 'ver_cuadrante_completo', etiqueta: 'Ver cuadrante completo', desc: 'Ver los conteos de fechas lejanas (más allá de hoy + 1 día) con todos los datos, igual que un administrador, en vez de la versión reducida (solo tiendas y cierres, sin límites, celdas de conteo ni plazos de entrega).' },
+      { clave: 'cierres', etiqueta: 'Bloquear y desbloquear conteos', desc: 'Bloquear el conteo de una tienda (con una observación) o desbloquearlo en la cuadrícula de conteos.' },
+      { clave: 'ver_cuadrante_completo', etiqueta: 'Ver cuadrante completo', desc: 'Ver los conteos de fechas lejanas (más allá de hoy + 1 día) con todos los datos, igual que un administrador, en vez de la versión reducida (solo tiendas y bloqueos, sin límites, celdas de conteo ni plazos de entrega).' },
     ],
   },
   {
@@ -37,6 +37,7 @@ const CATALOGO_PERMISOS = [
       { clave: 'enviar_prevision', etiqueta: 'Enviar previsión', desc: 'Enviar por email la previsión de una agrupación a la agencia de transporte (el conteo sigue siendo editable).' },
       { clave: 'enviar_definitivo', etiqueta: 'Enviar definitivo', desc: 'Enviar por email el definitivo de una agrupación a la agencia de transporte (queda bloqueada y archivada).' },
       { clave: 'enviar_informatica', etiqueta: 'Enviar a informática', desc: 'Enviar por email la previsión de carga de una agrupación solo a transporte@primor.eu (el conteo sigue siendo editable).' },
+      { clave: 'ajustar_carga', etiqueta: 'Ajustar carga', desc: 'Ajustar cuántos palets van en el camión por tienda (camioncito de la cabecera) sin enviar nada, y volver a verificar la carga cuando cambia el conteo. Sin este permiso la carga se puede ver, pero no modificar.' },
     ],
   },
   {
@@ -52,7 +53,7 @@ const CATALOGO_PERMISOS = [
     grupo: 'Administración',
     items: [
       { clave: 'usuarios', etiqueta: 'Gestión de usuarios', desc: 'Crear, editar, eliminar y cambiar la contraseña de otros usuarios.' },
-      { clave: 'festivos', etiqueta: 'Cierres y cambios', desc: 'Cierres, notas y cambios puntuales de agrupación a nivel de día completo (no de una tienda o ruta concreta).' },
+      { clave: 'festivos', etiqueta: 'Bloqueos y cambios', desc: 'Bloqueos de conteo, notas y cambios puntuales de agrupación a nivel de día completo (no de una tienda o ruta concreta).' },
       { clave: 'palets_forzados', etiqueta: 'Palets forzados', desc: 'Ver el histórico de palets forzados manualmente.' },
       { clave: 'cola_emails', etiqueta: 'Cola de avisos a tiendas', desc: 'Ver la cola de envíos a tiendas y reintentar los que hayan fallado.' },
       { clave: 'aviso_tiendas', etiqueta: 'Simulación envío tiendas', desc: 'Lanzar la vista previa del barrido del día y el envío manual real de avisos a tiendas.' },
@@ -122,7 +123,7 @@ function renderAdminUsuarios() {
           '<input type="text" id="admin-usuarios-buscar" placeholder="Buscar por usuario o nombre…">' +
         '</div>' +
       '</div>' +
-      '<div id="admin-usuarios-resultado"><div class="loader">Cargando…</div></div>' +
+      '<div id="admin-usuarios-resultado"><div class="loader"><span class="spinner-navy"></span><div>Cargando…</div></div></div>' +
     '</div>';
 
   document.getElementById('btn-admin-usuarios-refrescar').onclick = function () { cargarUsuariosAdmin_(true); };
@@ -150,7 +151,7 @@ function cargarUsuariosAdmin_(esRefrescoManual) {
   const resultadoEl = document.getElementById('admin-usuarios-resultado');
   const btnRefrescar = document.getElementById('btn-admin-usuarios-refrescar');
   if (esRefrescoManual && btnRefrescar) { btnRefrescar.classList.add('girando'); btnRefrescar.disabled = true; }
-  if (!esRefrescoManual && resultadoEl) resultadoEl.innerHTML = '<div class="loader">Cargando…</div>';
+  if (!esRefrescoManual && resultadoEl) resultadoEl.innerHTML = '<div class="loader"><span class="spinner-navy"></span><div>Cargando…</div></div>';
 
   llamarApi_('getUsuarios', [])
     .then(function (datos) {

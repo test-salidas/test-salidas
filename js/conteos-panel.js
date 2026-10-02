@@ -111,7 +111,10 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     badgeEstado(seccion) +
     '<span class="verif-pastillas"></span>' +
     '</div></div>' +
+    (seccion.tieneViernes ? '<span class="badge-total-viernes" title="Palets de VIERNES: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Viernes:&nbsp;<span class="total-viernes-valor">0</span></span>' : '') +
+    (seccion.tieneCasillaDomingo ? '<span class="badge-total-domingo" title="Palets de DOMINGO: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Domingo:&nbsp;<span class="total-domingo-valor">0</span></span>' : '') +
     '<span class="badge-total-palets"><span class="total-palets-valor">0</span>&nbsp;palets</span>' +
+    htmlBotonListaCarga_(seccion) +
     '<button type="button" class="btn-toggle-colapsar" title="Contraer / expandir">' +
     '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
     '</div>' +
@@ -178,6 +181,215 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     else ESTADO.colapsadas.delete(seccion.nombre);
   });
 
+  // Camioncito junto a los palets. Con el servidor nuevo (seccion.carga
+  // definida) abre la carga del camión: para ajustarla/verificarla si se
+  // tiene el permiso "Ajustar carga", o para verla en solo lectura. Con el
+  // servidor antiguo (seccion.carga sin definir), como antes: la lista
+  // guardada con el último envío (ver htmlBotonListaCarga_ / mostrarModalListaCarga).
+  function bindBotonListaCarga_() {
+    const btn = header.querySelector('.btn-lista-carga');
+    if (!btn) return;
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      if (seccion.carga !== undefined) { abrirCarga_(); return; }
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (info) {
+          btn.disabled = false;
+          if (!info) { mostrarToast('Todavía no hay ningún envío para esta agrupación', true); return; }
+          mostrarModalListaCarga(info, parsearNombreAgrupacion(seccion.nombre).titulo, formatearFechaLarga(fecha));
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          mostrarErrorServidor(err);
+        })
+        .getListaCarga(dia, seccion.nombre, fecha);
+    };
+  }
+  // El camioncito cambia de color sin recargar la página: tras un envío,
+  // tras guardar la carga, o al cambiar el conteo de una tienda ajustada.
+  let claseBotonCarga_ = null;
+  function actualizarBotonListaCarga_(revisar) {
+    if (revisar === undefined) revisar = Object.keys(tiendasARevisar_()).length > 0;
+    const wrapTmp = document.createElement('div');
+    wrapTmp.innerHTML = htmlBotonListaCarga_(seccion, revisar);
+    const nuevo = wrapTmp.firstElementChild;
+    const viejo = header.querySelector('.btn-lista-carga');
+    const claseNueva = nuevo ? nuevo.className : '';
+    if (viejo && claseNueva === claseBotonCarga_) return; // ya está como debe: no tocar el DOM
+    claseBotonCarga_ = claseNueva;
+    if (viejo) viejo.remove();
+    const badge = header.querySelector('.badge-total-palets');
+    if (nuevo && badge) badge.insertAdjacentElement('afterend', nuevo);
+    bindBotonListaCarga_();
+  }
+  bindBotonListaCarga_();
+
+  /* ---------------- CARGA DEL CAMIÓN ----------------
+   * seccion.carga = { origen: 'ajuste'|'prevision'|'definitivo', hora, por,
+   *   lista: [{tienda, contados, cargar, cerrada}] } o null.
+   * "contados" es el TOTAL que tenía la tienda cuando se fijó la carga.
+   * Una tienda está "ajustada" si se fijó con cargar ≠ contados; si después
+   * cambia su conteo, la carga NO se recalcula: queda "a revisar" hasta que
+   * alguien con permiso "Ajustar carga" la verifique. Las tiendas no
+   * ajustadas cargan siempre lo contado. */
+  function puedeAjustarCarga_() {
+    return editable && seccion.estado !== 'enviado' && tienePermiso('ajustar_carga');
+  }
+  // Tiendas de la tabla con lo contado AHORA (TOTAL en pantalla), su límite
+  // y VIERNES + DOMINGO (cuentan para el límite, no van en la carga).
+  function filasCargaActuales_() {
+    const filas = [];
+    tableWrap.querySelectorAll('table.conteo tbody tr').forEach(function (tr) {
+      if (tr.classList.contains('fila-grupo-header') || tr.classList.contains('fila-sale-excepcion')) return;
+      const nombre = tr.getAttribute('data-nombre') || '';
+      if (!nombre) return;
+      if (tr.classList.contains('fila-cerrada')) { filas.push({ nombre: nombre, cerrada: true }); return; }
+      const totalInput = tr.querySelector('input[data-campo="total"]');
+      const valor = totalInput ? parseFloat(totalInput.value) : NaN;
+      const viernesInput = tr.querySelector('input[data-campo="viernes"]');
+      const domingoInput = tr.querySelector('input[data-campo="casillaDomingo"]');
+      const vie = viernesInput && viernesInput.value !== '' ? (parseFloat(viernesInput.value) || 0) : 0;
+      const dom = domingoInput && domingoInput.value !== '' ? (parseFloat(domingoInput.value) || 0) : 0;
+      filas.push({
+        nombre: nombre,
+        contados: isNaN(valor) ? 0 : valor,
+        limite: parseFloat(tr.getAttribute('data-limite')),
+        otros: vie + dom
+      });
+    });
+    return filas;
+  }
+  function cargaEditable_() {
+    const c = seccion.carga;
+    return !!(c && c.origen !== 'definitivo' && seccion.estado !== 'enviado' && Array.isArray(c.lista));
+  }
+  // { 'NOMBRE TIENDA': palets } de las tiendas ajustadas a mano que siguen en la tabla.
+  function ajustesGuardados_() {
+    const res = {};
+    if (!cargaEditable_()) return res;
+    const abiertas = {};
+    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) abiertas[f.nombre] = true; });
+    seccion.carga.lista.forEach(function (t) {
+      if (t.cerrada || t.cargar === null || t.cargar === undefined || !abiertas[t.tienda]) return;
+      if (Number(t.cargar) !== Number(t.contados)) res[t.tienda] = Number(t.cargar);
+    });
+    return res;
+  }
+  // { 'NOMBRE TIENDA': {antes, ahora} } de las tiendas ajustadas cuyo conteo ha cambiado.
+  function tiendasARevisar_() {
+    const res = {};
+    if (!cargaEditable_()) return res;
+    const guardadas = {};
+    seccion.carga.lista.forEach(function (t) { guardadas[t.tienda] = t; });
+    filasCargaActuales_().forEach(function (f) {
+      const g = guardadas[f.nombre];
+      if (f.cerrada || !g || g.cerrada) return;
+      const antes = Number(g.contados) || 0;
+      if (Number(g.cargar) !== antes && f.contados !== antes) res[f.nombre] = { antes: antes, ahora: f.contados };
+    });
+    return res;
+  }
+  // Carga que saldría ahora en el email: la ajustada donde la hay, lo contado en el resto.
+  function listaCargaEfectiva_() {
+    const ajustes = ajustesGuardados_();
+    return filasCargaActuales_().map(function (f) {
+      if (f.cerrada) return { tienda: f.nombre, cerrada: true };
+      return { tienda: f.nombre, contados: f.contados, cargar: Object.prototype.hasOwnProperty.call(ajustes, f.nombre) ? ajustes[f.nombre] : f.contados, cerrada: false };
+    });
+  }
+  // Camioncito + pastilla "Carga a revisar" de la cabecera.
+  function actualizarEstadoCarga_() {
+    if (seccion.carga === undefined) return;
+    const revisar = Object.keys(tiendasARevisar_()).length > 0;
+    actualizarBotonListaCarga_(revisar);
+    const fila = header.querySelector('.name-row');
+    let badge = header.querySelector('.badge-carga-revisar');
+    if (revisar && !badge && fila) {
+      badge = document.createElement('span');
+      badge.className = 'badge badge-carga-revisar';
+      badge.title = 'El conteo ha cambiado después de ajustar la carga';
+      badge.innerHTML = '<span class="badge-dot"></span>Carga a revisar';
+      const ancla = fila.querySelector('.verif-pastillas');
+      if (ancla) fila.insertBefore(badge, ancla); else fila.appendChild(badge);
+    } else if (!revisar && badge) {
+      badge.remove();
+    }
+  }
+  function infoCargaParaModal_() {
+    const c = seccion.carga;
+    return c ? { tipo: c.origen, hora: c.hora, enviadoPor: c.por, lista: c.lista } : null;
+  }
+  // Click en el camioncito (servidor nuevo).
+  function abrirCarga_() {
+    const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
+    const fechaTexto = formatearFechaLarga(fecha);
+    const c = seccion.carga;
+    const revisar = tiendasARevisar_();
+    const hayRevisar = Object.keys(revisar).length > 0;
+    if (puedeAjustarCarga_() && (!c || c.origen === 'ajuste' || hayRevisar)) {
+      abrirAjustarCarga_(null, null);
+      return;
+    }
+    // Carga ajustada sin enviar: se enseña con lo contado AHORA (la que
+    // saldría en el email). Previsión/Definitivo: lo que se mandó.
+    const info = infoCargaParaModal_();
+    if (info && info.tipo === 'ajuste' && seccion.estado !== 'enviado') info.lista = listaCargaEfectiva_();
+    mostrarModalListaCarga(info, titulo, fechaTexto, {
+      revisar: revisar,
+      soloLectura: !puedeAjustarCarga_() && !(c && c.origen === 'definitivo') && seccion.estado !== 'enviado',
+      onAjustar: puedeAjustarCarga_() ? function () { abrirAjustarCarga_(null, null); } : null
+    });
+  }
+  // Modal editable. tipoEnvio: 'prevision'|'definitivo' si se abre en mitad
+  // de un envío (entonces alTerminar sigue con el envío tras guardar).
+  function abrirAjustarCarga_(tipoEnvio, alTerminar) {
+    const ajustes = ajustesGuardados_();
+    const revisar = tiendasARevisar_();
+    const filas = filasCargaActuales_().map(function (f) {
+      if (f.cerrada) return f;
+      return Object.assign({}, f, {
+        cargar: Object.prototype.hasOwnProperty.call(ajustes, f.nombre) ? ajustes[f.nombre] : f.contados,
+        cambio: revisar[f.nombre] || null
+      });
+    });
+    mostrarModalAjustarCarga({
+      titulo: parsearNombreAgrupacion(seccion.nombre).titulo,
+      fechaTexto: formatearFechaLarga(fecha),
+      filas: filas,
+      carga: seccion.carga,
+      tipoEnvio: tipoEnvio,
+      onGuardar: function (cargas) {
+        guardarCarga_(cargas, function (ok) {
+          if (!ok) return;
+          if (alTerminar) { alTerminar(); return; }
+          cerrarModal();
+          mostrarToast('Carga guardada');
+        });
+      }
+    });
+  }
+  // Guarda primero el conteo (para que el servidor vea lo mismo que hay en
+  // pantalla) y después la carga.
+  function guardarCarga_(cargas, done) {
+    mostrarModalCargando('Guardando la carga del camión…');
+    autoguardarSeccion(function (ok) {
+      if (!ok) { cerrarModal(); done(false); return; }
+      llamarApi_('guardarCargaAjustada', [dia, seccion.nombre, fecha, cargas])
+        .then(function (carga) {
+          seccion.carga = carga || null;
+          actualizarEstadoCarga_();
+          done(true);
+        })
+        .catch(function (err) {
+          cerrarModal();
+          if (err && /permiso/i.test(err.message || '')) mostrarModalSinPermiso();
+          else mostrarErrorServidor(err);
+          done(false);
+        });
+    });
+  }
+
   // Notas/instrucciones de carga escritas en la propia hoja de Excel
   // (ej. "1 CAMIÓN 33 P. + ... TODOS LOS LUNES"). De solo lectura.
   if (seccion.notasCarga && seccion.notasCarga.length) {
@@ -234,12 +446,14 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const siguiente = seccion.tiendas[i + 1];
     const esPrimeraDeGrupo = !!t.notaGrupoId && (!anterior || anterior.notaGrupoId !== t.notaGrupoId);
     const esUltimaDeGrupo = !!t.notaGrupoId && (!siguiente || siguiente.notaGrupoId !== t.notaGrupoId);
-    const headerHtml = esPrimeraDeGrupo ? filaGrupoHeaderHtml(t, nombresPorGrupo[t.notaGrupoId], seccion.tienePeso, seccion.tieneCExpress, seccion.tieneSobrestock) : '';
-    return headerHtml + filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, seccion.tienePeso, seccion.tieneCExpress, seccion.tieneSobrestock);
+    const headerHtml = esPrimeraDeGrupo ? filaGrupoHeaderHtml(t, nombresPorGrupo[t.notaGrupoId], seccion.tienePeso, seccion.tieneCExpress, seccion.tieneSobrestock, seccion.tieneViernes, seccion.tieneCasillaDomingo) : '';
+    return headerHtml + filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, seccion.tienePeso, seccion.tieneCExpress, seccion.tieneSobrestock, seccion.tieneViernes, seccion.tieneCasillaDomingo);
   }).join('');
   tableWrap.innerHTML =
     '<table class="conteo"><thead><tr>' +
     '<th class="th-nombre">Tienda</th><th>Límite</th>' +
+    (seccion.tieneViernes ? '<th class="th-viernes">VIERNES</th>' : '') +
+    (seccion.tieneCasillaDomingo ? '<th class="th-domingo">DOMINGO</th>' : '') +
     NAVES_CONTEO.map(function (n) { return thCampoNave_(n.campo, n.etiqueta); }).join('') +
     '<th class="th-total">TOTAL</th><th>PDTE</th>' +
     (seccion.tienePeso ? '<th>PESO</th>' : '') +
@@ -273,7 +487,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   panel.appendChild(body);
 
   // Total de palets de la agrupación: suma en vivo del TOTAL de cada tienda
-  // (no cuenta las tiendas cerradas, que no tienen input de TOTAL).
+  // (no cuenta las tiendas cerradas, que no tienen input de TOTAL). El
+  // VIERNES NO entra aquí (no va en la carga): se suma aparte en su propia
+  // etiqueta "Viernes: N" de la cabecera. Lo mismo con DOMINGO.
   function actualizarTotalPalets() {
     let suma = 0;
     tableWrap.querySelectorAll('input.celda-total').forEach(function (inp) {
@@ -282,6 +498,24 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     });
     const el = header.querySelector('.total-palets-valor');
     if (el) el.textContent = suma;
+    const elV = header.querySelector('.total-viernes-valor');
+    if (elV) {
+      let sumaV = 0;
+      tableWrap.querySelectorAll('input[data-campo="viernes"]').forEach(function (inp) {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) sumaV += v;
+      });
+      elV.textContent = sumaV;
+    }
+    const elD = header.querySelector('.total-domingo-valor');
+    if (elD) {
+      let sumaD = 0;
+      tableWrap.querySelectorAll('input[data-campo="casillaDomingo"]').forEach(function (inp) {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) sumaD += v;
+      });
+      elD.textContent = sumaD;
+    }
     return suma;
   }
   const sumaInicialPalets = actualizarTotalPalets();
@@ -419,6 +653,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   }, true);
 
   actualizarBotonesEnvio_(); // estado inicial: envío apagado hasta el primer "Guardar conteo" de esta sesión
+  actualizarEstadoCarga_(); // estado inicial del camioncito (ya con la tabla pintada)
 
   /** Recalcula EN VIVO (sin esperar a guardar ni a recargar) si esta
    *  agrupación "tiene datos" (pendiente -> en progreso), para que el
@@ -457,7 +692,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         btnReabrir.onclick = function () {
           if (!editable) return;
           const cierreId = tr.getAttribute('data-cierre-id');
-          appConfirm('Reabrir tienda', '¿Quieres reabrir esta tienda para el conteo de hoy?', function () {
+          appConfirm('Desbloquear conteo', '¿Quieres desbloquear el conteo de esta tienda para hoy?', function () {
             eliminarObservacionYRecargar(cierreId);
           });
         };
@@ -469,6 +704,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         input.addEventListener('input', function () {
           marcarCambiosSinGuardar_();
           actualizarTotalPalets();
+          actualizarEstadoCarga_();
           actualizarEstadoLocalSeccion_();
           quitarVerificacionLocal_(input.getAttribute('data-campo'));
         });
@@ -478,7 +714,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         btnCerrar.onclick = function () {
           if (!editable) return;
           const nombreTienda = tr.getAttribute('data-nombre');
-          appPrompt('Cerrar tienda', 'Motivo (ej. "Tienda cerrada, no se da a agencia")…', function (texto) {
+          appPrompt('Bloquear conteo', 'Observación que saldrá en el conteo (ej. "TIENDA CERRADA POR INVENTARIO")…', function (texto) {
             guardarObservacionYRecargar({ fecha: fecha, dia: dia, agrupacion: seccion.nombre, tienda: nombreTienda, tipo: 'cierre', texto: texto });
           });
         };
@@ -501,7 +737,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     tableWrap.querySelectorAll('table.conteo tbody tr').forEach(function (tr) {
       if (tr.classList.contains('fila-grupo-header') || tr.classList.contains('fila-cerrada') || tr.classList.contains('fila-sale-excepcion')) return;
       const input = tr.querySelector('input[data-campo="' + campo + '"]');
-      if (!input || input.classList.contains('celda-no')) return;
+      // "NO" sin forzar y columnas que hoy rellena otra agrupación (doble
+      // salida): no se tocan al verificar.
+      if (!input || input.classList.contains('celda-no') || input.classList.contains('celda-otra-agencia')) return;
       if (String(input.value).trim() === '') {
         inputs.push(input);
         nombres.push(tr.getAttribute('data-nombre') || '');
@@ -714,9 +952,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       // El botón se ve siempre, pero enviar requiere el permiso "Enviar previsión"
       // (el backend lo vuelve a comprobar en enviar_prevision_agencia).
       if (!tienePermiso('enviar_prevision')) { mostrarModalSinPermiso(); return; }
-      mostrarModalEnviarAgencia(calcularResumenEnvio(), function (callback) {
-        enviarSeccion('prevision', callback);
-      }, 'prevision');
+      abrirEnvioConLimite_('prevision');
     };
   }
 
@@ -727,10 +963,86 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       // Igual que la previsión: requiere el permiso "Enviar definitivo"
       // (el backend lo vuelve a comprobar en enviar_definitivo_agencia).
       if (!tienePermiso('enviar_definitivo')) { mostrarModalSinPermiso(); return; }
-      mostrarModalEnviarAgencia(calcularResumenEnvio(), function (callback) {
-        enviarSeccion('definitivo', callback);
-      }, 'definitivo');
+      abrirEnvioConLimite_('definitivo');
     };
+  }
+
+  /**
+   * Previsión / Definitivo: si alguna tienda (con datos en el TOTAL) está por
+   * encima de su límite, primero se pide confirmar cuántos palets se cargan
+   * en el camión (mostrarModalConfirmarPalets); esos números sustituyen al
+   * TOTAL de esas tiendas en el email. Si no hay ninguna pasada, se va
+   * directo al resumen de siempre.
+   */
+  function abrirEnvioConLimite_(tipo) {
+    // Hay carga guardada (ajustada a mano o de la previsión): antes de nada
+    // se pregunta si es correcta, o se pide verificarla si cambió el conteo.
+    if (cargaEditable_()) {
+      const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
+      const fechaTexto = formatearFechaLarga(fecha);
+      const revisar = tiendasARevisar_();
+      if (Object.keys(revisar).length) {
+        if (puedeAjustarCarga_()) abrirAjustarCarga_(tipo, function () { continuarEnvio_(tipo); });
+        else mostrarModalCargaPendiente({ titulo: titulo, fechaTexto: fechaTexto, tipo: tipo, lista: listaCargaEfectiva_(), revisar: revisar });
+        return;
+      }
+      mostrarModalCargaCorrecta({
+        titulo: titulo,
+        fechaTexto: fechaTexto,
+        tipo: tipo,
+        carga: seccion.carga,
+        lista: listaCargaEfectiva_(),
+        onSi: function () { continuarEnvio_(tipo); },
+        onModificar: puedeAjustarCarga_() ? function () { abrirAjustarCarga_(tipo, function () { continuarEnvio_(tipo); }); } : null
+      });
+      return;
+    }
+    continuarEnvio_(tipo);
+  }
+
+  // Envío de siempre. Las tiendas con carga ya ajustada no vuelven a salir
+  // en el modal de límite: su número ya está decidido.
+  function continuarEnvio_(tipo) {
+    const resumen = calcularResumenEnvio();
+    const guardados = ajustesGuardados_();
+    const contadosAhora = {};
+    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) contadosAhora[f.nombre] = f.contados; });
+    Object.keys(guardados).forEach(function (nombre) {
+      resumen.totalPalets += guardados[nombre] - (contadosAhora[nombre] || 0);
+    });
+    resumen.excedidas = resumen.excedidas.map(function (e) {
+      if (!Object.prototype.hasOwnProperty.call(guardados, e.nombre)) return e;
+      return Object.assign({}, e, { carga: guardados[e.nombre], total: guardados[e.nombre] + e.otros, yaDecidida: true });
+    }).filter(function (e) { return e.total > e.limite; });
+    const aConfirmar = resumen.excedidas.filter(function (e) { return e.carga > 0 && !e.yaDecidida; });
+    const seguir = function (ajustes) {
+      if (ajustes) {
+        resumen.excedidas.forEach(function (e) {
+          if (Object.prototype.hasOwnProperty.call(ajustes, e.nombre)) {
+            resumen.totalPalets += ajustes[e.nombre] - e.carga;
+          }
+        });
+        // En el resumen solo siguen como "por encima del límite" las que
+        // se hayan confirmado aun así por encima.
+        resumen.excedidas = resumen.excedidas.filter(function (e) {
+          const cargar = Object.prototype.hasOwnProperty.call(ajustes, e.nombre) ? ajustes[e.nombre] : e.carga;
+          return cargar + e.otros > e.limite;
+        }).map(function (e) {
+          const cargar = Object.prototype.hasOwnProperty.call(ajustes, e.nombre) ? ajustes[e.nombre] : e.carga;
+          return Object.assign({}, e, { total: cargar + e.otros });
+        });
+      }
+      // Lo que va en el email: la carga ya ajustada + lo confirmado ahora.
+      const todos = Object.assign({}, guardados, ajustes || {});
+      mostrarModalEnviarAgencia(resumen, function (callback) {
+        enviarSeccion(tipo, callback, Object.keys(todos).length ? todos : null);
+      }, tipo);
+    };
+    if (aConfirmar.length) {
+      mostrarModalConfirmarPalets(resumen, aConfirmar, tipo, seguir);
+    } else {
+      seguir(null);
+    }
   }
 
   const btnHeaderInformatica = header.querySelector('.btn-header-informatica');
@@ -809,18 +1121,37 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       if (!isNaN(valor) && valor > 0) tiendasConDatos++;
       else pendientes.push(tr.getAttribute('data-nombre') || '');
       const limite = parseFloat(tr.getAttribute('data-limite'));
-      if (!isNaN(valor) && valor > 0 && !isNaN(limite) && limite > 0 && valor > limite) {
+      // El VIERNES cuenta para el límite de la tienda (igual que el aviso
+      // de la fila), aunque no vaya en la carga.
+      const viernesInput = tr.querySelector('input[data-campo="viernes"]');
+      const vie = viernesInput && viernesInput.value !== '' ? (parseFloat(viernesInput.value) || 0) : 0;
+      // Y lo mismo con el DOMINGO.
+      const domingoInput = tr.querySelector('input[data-campo="casillaDomingo"]');
+      const dom = domingoInput && domingoInput.value !== '' ? (parseFloat(domingoInput.value) || 0) : 0;
+      const valorConViernes = (isNaN(valor) ? 0 : valor) + vie + dom;
+      if (valorConViernes > 0 && !isNaN(limite) && limite > 0 && valorConViernes > limite) {
+        const carga = isNaN(valor) ? 0 : valor;
+        const otros = vie + dom;
         excedidas.push({
           nombre: tr.getAttribute('data-nombre') || '',
-          total: valor,
+          total: valorConViernes,
           limite: limite,
-          exceso: valor - limite
+          exceso: valorConViernes - limite,
+          // Para el modal "Confirma el número de palets a cargar": carga es
+          // el TOTAL que va en el email; VIERNES + DOMINGO cuentan para el
+          // límite pero no van en el email, así que se descuentan del valor
+          // propuesto.
+          carga: carga,
+          otros: otros,
+          sugerido: Math.max(0, Math.min(carga, limite - otros))
         });
       }
       if (seccion.tienePeso && !isNaN(valor) && valor > 0) {
         const pesoInput = tr.querySelector('input[data-campo="peso"]');
         const peso = pesoInput ? parseFloat(pesoInput.value) : NaN;
-        if (isNaN(peso) || peso <= 0) pesoFaltante.push(tr.getAttribute('data-nombre') || '');
+        // Doble salida: el PESO lo pone la agrupación de origen, no esta.
+        const pesoDeOtra = pesoInput && pesoInput.classList.contains('celda-otra-agencia');
+        if (!pesoDeOtra && (isNaN(peso) || peso <= 0)) pesoFaltante.push(tr.getAttribute('data-nombre') || '');
       }
     });
     let totalPalets = 0;
@@ -840,7 +1171,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     };
   }
 
-  function enviarSeccion(tipo, callback) {
+  // ajustes (opcional): { 'NOMBRE TIENDA': palets } confirmados en el modal
+  // de límite; sustituyen al TOTAL de esas tiendas en el email.
+  function enviarSeccion(tipo, callback, ajustes) {
     // "Enviar a informática" con el Definitivo ya enviado: no hay nada que
     // guardar (el conteo está archivado), se manda directamente.
     if (tipo === 'informatica' && seccion.estado === 'enviado') {
@@ -905,8 +1238,21 @@ if (callback) callback(true, mensaje);
           if (btnInformatica) btnInformatica.disabled = false;
           if (callback) callback(false, (err && err.message) ? err.message : String(err));
         })
-        [metodo](dia, seccion.nombre, fecha);
+        [metodo](dia, seccion.nombre, fecha, (tipo === 'informatica') ? null : (ajustes || null));
     });
+  }
+
+  // Tras un envío, la carga vigente pasa a ser la que se acaba de mandar
+  // (el siguiente sondeo trae la misma desde el servidor).
+  function cargaTrasEnvio_(tipo, resultado) {
+    if (seccion.carga === undefined) return; // servidor antiguo
+    const ahora = new Date();
+    seccion.carga = {
+      origen: tipo,
+      hora: ('0' + ahora.getHours()).slice(-2) + ':' + ('0' + ahora.getMinutes()).slice(-2),
+      por: SESSION_NOMBRE || (resultado && resultado.enviadoPor) || '',
+      lista: (resultado && Array.isArray(resultado.listaCarga)) ? resultado.listaCarga : (seccion.carga ? seccion.carga.lista : null)
+    };
   }
 
   /**
@@ -940,6 +1286,9 @@ if (callback) callback(true, mensaje);
       const btnPrevisionEl = header.querySelector('.btn-header-prevision');
       if (btnPrevisionEl) btnPrevisionEl.remove();
       actualizarMenuRapidoItem_(seccion);
+      cargaTrasEnvio_('prevision', resultado);
+      actualizarEstadoCarga_();
+      actualizarBotonListaCarga_();
       return;
     }
 
@@ -974,6 +1323,10 @@ if (callback) callback(true, mensaje);
     if (btnDefinitivoEl) btnDefinitivoEl.remove();
     // "Enviar a informática" NO se quita: sigue disponible tras el definitivo.
     actualizarBotonesEnvio_();
+    cargaTrasEnvio_('definitivo', resultado);
+    const badgeRevisar = header.querySelector('.badge-carga-revisar');
+    if (badgeRevisar) badgeRevisar.remove();
+    actualizarBotonListaCarga_();
 
     if (esHoy && !header.querySelector('.btn-deshacer-envio')) {
       const wrapBtn = document.createElement('div');

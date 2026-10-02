@@ -19,22 +19,42 @@ const SUPABASE_ACCIONES_ = {
     // También los "cambios después de verificar" que siguen abiertos
     // (seccion.cambiosVerif = { c60: {verificadoPor, modificadoPor, hora,
     // cambios: [...]}, ... }), para la pastilla naranja del panel.
-    return Promise.all([
-      llamarRpcSupabase_('get_conteo_dia', { p_fecha: fecha }),
-      llamarRpcSupabase_('get_verificaciones_dia', { p_fecha: fecha }).catch(function () { return {}; }),
-      llamarRpcSupabase_('get_cambios_tras_verificar_dia', { p_fecha: fecha }).catch(function () { return {}; })
-    ]).then(function (res) {
-      const data = res[0];
-      const verifs = res[1] || {};
-      const cambios = res[2] || {};
+    //
+    // Todo va en UNA sola petición (get_conteo_dia_completo) en vez de tres,
+    // para reducir peticiones y Log Ingestion de Supabase: esta acción la
+    // lanza el autorefresco de los conteos cada pocos segundos. Si esa
+    // función no existiera en la base de datos (PGRST202), se vuelve a las
+    // tres llamadas de siempre para no romper nada.
+    //
+    // Y la carga del camión de cada agrupación (seccion.carga = { origen:
+    // 'ajuste'|'prevision'|'definitivo', hora, por, lista } o null si no
+    // hay ninguna). Si el servidor todavía no la manda (versión antigua de
+    // get_conteo_dia_completo), seccion.carga se queda sin definir y el
+    // camioncito funciona como antes (ver htmlBotonListaCarga_).
+    function unir_(data, verifs, cambios, cargas) {
+      verifs = verifs || {};
+      cambios = cambios || {};
       if (data && data.secciones) {
         data.secciones.forEach(function (s) {
           s.verificaciones = verifs[s.nombre] || {};
           s.cambiosVerif = cambios[s.nombre] || {};
+          if (cargas) s.carga = cargas[s.nombre] || null;
         });
       }
       return data;
-    });
+    }
+    return llamarRpcSupabase_('get_conteo_dia_completo', { p_fecha: fecha })
+      .then(function (res) {
+        return unir_(res && res.conteo, res && res.verificaciones, res && res.cambios, res && res.cargas);
+      })
+      .catch(function (err) {
+        if (!err || err.code !== 'PGRST202') throw err;
+        return Promise.all([
+          llamarRpcSupabase_('get_conteo_dia', { p_fecha: fecha }),
+          llamarRpcSupabase_('get_verificaciones_dia', { p_fecha: fecha }).catch(function () { return {}; }),
+          llamarRpcSupabase_('get_cambios_tras_verificar_dia', { p_fecha: fecha }).catch(function () { return {}; })
+        ]).then(function (r) { return unir_(r[0], r[1], r[2]); });
+      });
   },
   // -- Supabase: Verificar conteo por nave (60 / PTA / CART.) --
   verificarConteo: function (args) {
@@ -46,6 +66,9 @@ const SUPABASE_ACCIONES_ = {
   getAvisosVerificacion: function () {
     return llamarRpcSupabase_('get_avisos_verificacion', {});
   },
+  borrarAvisoVerificacion: function (args) {
+    return llamarRpcSupabase_('borrar_aviso_verificacion', { p_id: args[0] });
+  },
   marcarAvisosVerificacionVistos: function (args) {
     return llamarRpcSupabase_('marcar_avisos_verificacion_vistos', { p_ids: args[0] || null });
   },
@@ -55,20 +78,36 @@ const SUPABASE_ACCIONES_ = {
   },
   // -- Supabase: enviarPrevisionAgencia / enviarDefinitivoAgencia --
   enviarPrevisionAgencia: function (args) {
-    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2];
-    return llamarRpcSupabase_('enviar_prevision_agencia', {
-      p_dia: dia,
-      p_nombre_ruta: nombreAgrupacion,
-      p_fecha: fecha
-    });
+    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2], ajustes = args[3];
+    const params = { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha };
+    // Palets confirmados en el modal de límite ({ 'NOMBRE TIENDA': n }):
+    // solo se manda si hay alguno, así la llamada es igual que antes cuando
+    // ninguna tienda va pasada.
+    if (ajustes && Object.keys(ajustes).length) params.p_ajustes = ajustes;
+    return llamarRpcSupabase_('enviar_prevision_agencia', params);
   },
   enviarDefinitivoAgencia: function (args) {
+    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2], ajustes = args[3];
+    const params = { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha };
+    // Palets confirmados en el modal de límite ({ 'NOMBRE TIENDA': n }):
+    // solo se manda si hay alguno, así la llamada es igual que antes cuando
+    // ninguna tienda va pasada.
+    if (ajustes && Object.keys(ajustes).length) params.p_ajustes = ajustes;
+    return llamarRpcSupabase_('enviar_definitivo_agencia', params);
+  },
+  // Lista de carga (camioncito junto a los palets): la que se guardó con el
+  // último envío de esa ruta y fecha (el Definitivo si lo hay; si no, la
+  // última Previsión).
+  getListaCarga: function (args) {
     const dia = args[0], nombreAgrupacion = args[1], fecha = args[2];
-    return llamarRpcSupabase_('enviar_definitivo_agencia', {
-      p_dia: dia,
-      p_nombre_ruta: nombreAgrupacion,
-      p_fecha: fecha
-    });
+    return llamarRpcSupabase_('get_lista_carga', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha });
+  },
+  // Carga del camión ajustada a mano sin enviar nada (camioncito de la
+  // cabecera). cargas = { 'NOMBRE TIENDA': palets }. Requiere el permiso
+  // "ajustar_carga" (el backend lo comprueba). Devuelve la carga vigente.
+  guardarCargaAjustada: function (args) {
+    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2], cargas = args[3];
+    return llamarRpcSupabase_('guardar_carga_ajustada', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha, p_cargas: cargas || {} });
   },
   // "Enviar a informática": misma previsión, pero solo a transporte@primor.eu.
   enviarInformaticaAgencia: function (args) {
@@ -310,6 +349,42 @@ const SUPABASE_ACCIONES_ = {
     const dia = args[0], nombreRuta = args[1];
     return llamarRpcSupabase_('desactivar_sobrestock_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta });
   },
+  // VIERNES: igual que SOBRESTOCK (por ruta y día), más la opción de
+  // excluir tiendas concretas de esa ruta (tiendas_ruta.excluida_viernes).
+  activarViernesRuta: function (args) {
+    const dia = args[0], nombreRuta = args[1];
+    return llamarRpcSupabase_('activar_viernes_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta });
+  },
+  desactivarViernesRuta: function (args) {
+    const dia = args[0], nombreRuta = args[1];
+    return llamarRpcSupabase_('desactivar_viernes_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta });
+  },
+  excluirViernesTiendaPlantilla: function (args) {
+    const dia = args[0], row = args[1];
+    return llamarRpcSupabase_('excluir_viernes_tienda_plantilla', { p_dia: dia, p_row: row });
+  },
+  incluirViernesTiendaPlantilla: function (args) {
+    const dia = args[0], row = args[1];
+    return llamarRpcSupabase_('incluir_viernes_tienda_plantilla', { p_dia: dia, p_row: row });
+  },
+  // DOMINGO: exactamente igual que VIERNES (rutas.tiene_casilla_domingo y
+  // tiendas_ruta.excluida_domingo).
+  activarDomingoRuta: function (args) {
+    const dia = args[0], nombreRuta = args[1];
+    return llamarRpcSupabase_('activar_domingo_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta });
+  },
+  desactivarDomingoRuta: function (args) {
+    const dia = args[0], nombreRuta = args[1];
+    return llamarRpcSupabase_('desactivar_domingo_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta });
+  },
+  excluirDomingoTiendaPlantilla: function (args) {
+    const dia = args[0], row = args[1];
+    return llamarRpcSupabase_('excluir_domingo_tienda_plantilla', { p_dia: dia, p_row: row });
+  },
+  incluirDomingoTiendaPlantilla: function (args) {
+    const dia = args[0], row = args[1];
+    return llamarRpcSupabase_('incluir_domingo_tienda_plantilla', { p_dia: dia, p_row: row });
+  },
   activarPdfEspecial: function (args) {
     const dia = args[0], nombreRuta = args[1];
     return llamarRpcSupabase_('activar_pdf_especial', { p_dia: dia, p_nombre_ruta: nombreRuta });
@@ -330,6 +405,35 @@ const SUPABASE_ACCIONES_ = {
   moverTiendaPlantilla: function (args) {
     const dia = args[0], row = args[1], direccion = args[2];
     return llamarRpcSupabase_('mover_tienda_plantilla', { p_dia: dia, p_row: row, p_direccion: direccion });
+  },
+  // Arrastrar una tienda en "Rutas y tiendas": la coloca justo debajo de
+  // otra tienda de su misma ruta (rowDebajo = null -> la primera), en el
+  // día actual y, si se pide, en otros días de la misma ruta (se empareja
+  // por clave de tienda). dias = null -> todos los días donde exista la
+  // ruta. simular = true -> no cambia nada, solo dice qué pasaría.
+  colocarTiendaPlantilla: function (args) {
+    const dia = args[0], row = args[1], rowDebajo = args[2], dias = args[3], simular = args[4];
+    return llamarRpcSupabase_('colocar_tienda_plantilla', {
+      p_dia: dia,
+      p_row: row,
+      p_row_debajo: rowDebajo == null ? null : rowDebajo,
+      p_dias: dias == null ? null : dias,
+      p_simular: !!simular
+    });
+  },
+  // Tras añadir una tienda en uno o varios días: la coloca debajo de la
+  // misma vecina y/o la mete en el mismo grupo de palets en todos ellos.
+  colocarTiendaNuevaDias: function (args) {
+    const o = args[0];
+    return llamarRpcSupabase_('colocar_tienda_nueva_dias', {
+      p_dia: o.dia,
+      p_nombre_ruta: o.nombreRuta,
+      p_clave: o.clave,
+      p_dias: o.dias || [],
+      p_row_debajo: o.rowDebajo == null ? null : o.rowDebajo,
+      p_al_principio: !!o.alPrincipio,
+      p_row_grupo: o.rowGrupo == null ? null : o.rowGrupo
+    });
   },
   moverRutaPlantilla: function (args) {
     const dia = args[0], nombreRuta = args[1], direccion = args[2];
@@ -370,6 +474,18 @@ const SUPABASE_ACCIONES_ = {
     const dia = args[0], nombreRuta = args[1], grupos = args[2];
     return llamarRpcSupabase_('set_grupos_limite_ruta', { p_dia: dia, p_nombre_ruta: nombreRuta, p_grupos: grupos });
   },
+  // Grupos de palets de la misma ruta en los OTROS días (para enseñar en
+  // el modal qué cambiaría al copiarlos) + clave de cada fila de hoy.
+  getGruposRutaDias: function (args) {
+    const dia = args[0], nombreRuta = args[1];
+    return llamarRpcSupabase_('get_grupos_ruta_dias', { p_dia: dia, p_nombre_ruta: nombreRuta });
+  },
+  // Copia los grupos de palets YA GUARDADOS de la ruta (día dia) a la
+  // misma ruta en los días indicados (sustituye los grupos de esos días).
+  copiarGruposRutaDias: function (args) {
+    const dia = args[0], nombreRuta = args[1], dias = args[2];
+    return llamarRpcSupabase_('copiar_grupos_ruta_dias', { p_dia: dia, p_nombre_ruta: nombreRuta, p_dias: dias });
+  },
   // "Quitar en este orden" a nivel de ruta: reemplaza al viejo campo de
   // texto libre por tienda. p_filas es el array de "row" (en el orden en
   // que se deben quitar) de las tiendas elegidas en el modal; el backend
@@ -387,7 +503,15 @@ const SUPABASE_ACCIONES_ = {
       p_agrupacion: obs.agrupacion,
       p_tienda: obs.tienda,
       p_tipo: obs.tipo,
-      p_texto: obs.texto
+      // Las observaciones (notas y bloqueos de conteo) se guardan siempre
+      // en MAYÚSCULAS, se escriban como se escriban.
+      p_texto: String(obs.texto == null ? '' : obs.texto).toUpperCase()
+    });
+  },
+  editarObservacion: function (args) {
+    return llamarRpcSupabase_('editar_observacion', {
+      p_id: args[0],
+      p_texto: String(args[1] == null ? '' : args[1]).toUpperCase()
     });
   },
   eliminarObservacion: function (args) {
@@ -402,7 +526,14 @@ const SUPABASE_ACCIONES_ = {
       p_agrupacion_origen: c.agrupacionOrigen,
       p_tienda: c.tienda,
       p_agrupacion_destino: c.agrupacionDestino,
-      p_transito: (c.transito != null ? c.transito : null)
+      p_transito: (c.transito != null ? c.transito : null),
+      // Doble salida: la tienda sale ese día por las dos agrupaciones y la
+      // de destino rellena solo las columnas de p_campos_destino.
+      p_modo: c.modo === 'doble' ? 'doble' : 'mover',
+      p_campos_destino: c.modo === 'doble' ? (c.camposDestino || []) : null,
+      // Naves de p_campos_destino que TAMBIÉN rellena la agrupación de
+      // origen (casilla en las dos agencias, cada una con su número).
+      p_campos_compartidos: c.modo === 'doble' ? (c.camposCompartidos || []) : null
     });
   },
   eliminarExcepcionTienda: function (args) {
