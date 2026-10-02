@@ -18,6 +18,14 @@
        ejecutarse todavía. */
     --topbar-h: 62px;
     --prevision: #3b74c9;
+    /* Casilla VIERNES (conteos y Rutas y tiendas) */
+    --viernes: #7a4fc9;
+    --viernes-suave: #f1ebfb;
+    --viernes-borde: #d9c9f3;
+    /* Casilla DOMINGO (igual que VIERNES, en verde azulado) */
+    --domingo: #0f7f7a;
+    --domingo-suave: #e3f4f2;
+    --domingo-borde: #b5dfda;
     --danger: #c94f4f;
     --radius: 10px;
     --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -569,6 +577,11 @@
     border-radius: 5px;
   }
   .festivos-del:hover { color: var(--danger); background: #fff; }
+  .festivos-edit {
+    background: none; border: none; color: var(--ink-soft); flex-shrink: 0; padding: 2px; margin-top: 1px;
+    border-radius: 5px;
+  }
+  .festivos-edit:hover { color: var(--navy); background: #fff; }
   .festivos-vacio {
     color: var(--ink-soft); font-size: 13px; text-align: center; padding: 36px 6px;
     display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -1102,6 +1115,38 @@
   .plantilla-ruta-pdfespecial:hover { background: #eef1f7; }
   .plantilla-ruta-pdfespecial.activo { background: var(--prevision); color: #fff; border-color: var(--prevision); }
   .plantilla-ruta-pdfespecial.activo:hover { filter: brightness(1.08); }
+  .plantilla-ruta-viernes {
+    flex-shrink: 0; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
+    font-size: 11.5px; padding: 5px 9px; border-radius: 7px; white-space: nowrap; letter-spacing: .02em;
+  }
+  .plantilla-ruta-viernes:hover { background: #eef1f7; }
+  .plantilla-ruta-viernes.activo { background: var(--viernes); color: #fff; border-color: var(--viernes); }
+  .plantilla-ruta-viernes.activo:hover { filter: brightness(1.08); }
+  .plantilla-tienda-viernes {
+    background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
+    font-size: 9.5px; padding: 4px 6px; border-radius: 6px; white-space: nowrap; letter-spacing: .02em;
+    text-decoration: line-through;
+  }
+  .plantilla-tienda-viernes:hover:not(:disabled) { background: #eef1f7; }
+  .plantilla-tienda-viernes:disabled { opacity: .35; cursor: default; }
+  .plantilla-tienda-viernes.activo { background: var(--viernes); color: #fff; border-color: var(--viernes); text-decoration: none; }
+  .plantilla-tienda-viernes.activo:hover:not(:disabled) { filter: brightness(1.08); }
+  .plantilla-ruta-domingo {
+    flex-shrink: 0; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
+    font-size: 11.5px; padding: 5px 9px; border-radius: 7px; white-space: nowrap; letter-spacing: .02em;
+  }
+  .plantilla-ruta-domingo:hover { background: #eef1f7; }
+  .plantilla-ruta-domingo.activo { background: var(--domingo); color: #fff; border-color: var(--domingo); }
+  .plantilla-ruta-domingo.activo:hover { filter: brightness(1.08); }
+  .plantilla-tienda-domingo {
+    background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
+    font-size: 9.5px; padding: 4px 6px; border-radius: 6px; white-space: nowrap; letter-spacing: .02em;
+    text-decoration: line-through;
+  }
+  .plantilla-tienda-domingo:hover:not(:disabled) { background: #eef1f7; }
+  .plantilla-tienda-domingo:disabled { opacity: .35; cursor: default; }
+  .plantilla-tienda-domingo.activo { background: var(--domingo); color: #fff; border-color: var(--domingo); text-decoration: none; }
+  .plantilla-tienda-domingo.activo:hover:not(:disabled) { filter: brightness(1.08); }
   .plantilla-tienda-bloqueos { display: flex; gap: 3px; flex-shrink: 0; }
   .plantilla-tienda-bloqueo {
     background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
@@ -1582,6 +1627,32 @@
     white-space: nowrap; flex-shrink: 0;
   }
   .badge-total-palets .total-palets-valor { font-size: 12.5px; }
+  /* Camioncito "Lista de carga" junto al total de palets (solo tras enviar
+     Previsión/Definitivo): ámbar tras la previsión, verde tras el definitivo. */
+  .btn-lista-carga {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 34px; height: 28px; border-radius: 14px; padding: 0; cursor: pointer;
+    border: 1px solid #f3dfb3; background: #fdf6ea; color: var(--amber-dark);
+    transition: filter .15s, transform .05s;
+  }
+  .btn-lista-carga:hover { filter: brightness(.97); }
+  .btn-lista-carga:active { transform: scale(.95); }
+  .btn-lista-carga:disabled { opacity: .6; cursor: wait; }
+  .btn-lista-carga.definitivo { background: #eaf7ef; border-color: #bfe3cf; color: #1f7a45; }
+  /* Carga del camión ajustable sin enviar (ver htmlBotonListaCarga_):
+     gris tenue = sin configurar, azul = ajustada sin enviar,
+     rojo con "!" = el conteo cambió después de ajustar (hay que verificar). */
+  .btn-lista-carga { position: relative; }
+  .btn-lista-carga.sin-configurar { background: #f6f7f9; border: 1px dashed #d3d7de; color: #b3b8c2; }
+  .btn-lista-carga.sin-configurar:hover { color: var(--ink-soft); border-color: #b3b8c2; filter: none; }
+  .btn-lista-carga.ajustada { background: #eef1f7; border-color: #cdd5e3; color: var(--navy); }
+  .btn-lista-carga.revisar { background: #fceded; border-color: #f3c6c6; color: var(--danger); }
+  .btn-lista-carga.revisar::after {
+    content: '!'; position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; line-height: 16px; text-align: center;
+    box-shadow: 0 0 0 2px #fff;
+  }
+  .badge-carga-revisar { background: #fceded; color: var(--danger); }
 
   .badge {
     display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700;
@@ -1854,6 +1925,34 @@
   table.conteo input.celda-forzada {
     border-color: var(--amber-dark); background: #fdf6ea; color: var(--amber-dark); font-weight: 800;
   }
+  /* Casilla VIERNES: suma al TOTAL de la tienda pero no a la carga. */
+  table.conteo th.th-viernes { background: var(--viernes-suave); color: var(--viernes); }
+  table.conteo input.celda-viernes { background: var(--viernes-suave); border-color: var(--viernes-borde); color: var(--viernes); font-weight: 800; }
+  table.conteo input.celda-viernes:focus { border-color: var(--viernes); box-shadow: 0 0 0 3px rgba(122,79,201,.14); }
+  table.conteo .celda-viernes-excluida {
+    width: 52px; margin: 0 auto; padding: 7px 4px; text-align: center; border-radius: 7px; font-weight: 800;
+    font-size: 13px; color: #fff; background: #8b9098; border: 1.5px solid #7a7f87; cursor: not-allowed;
+  }
+  .badge-total-viernes {
+    display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px; background: var(--viernes-suave); color: var(--viernes);
+    border: 1px solid var(--viernes-borde); white-space: nowrap; flex-shrink: 0;
+  }
+  .badge-total-viernes .total-viernes-valor { font-size: 12.5px; }
+  /* Casilla DOMINGO: igual que VIERNES. */
+  table.conteo th.th-domingo { background: var(--domingo-suave); color: var(--domingo); }
+  table.conteo input.celda-domingo { background: var(--domingo-suave); border-color: var(--domingo-borde); color: var(--domingo); font-weight: 800; }
+  table.conteo input.celda-domingo:focus { border-color: var(--domingo); box-shadow: 0 0 0 3px rgba(15,127,122,.14); }
+  table.conteo .celda-domingo-excluida {
+    width: 52px; margin: 0 auto; padding: 7px 4px; text-align: center; border-radius: 7px; font-weight: 800;
+    font-size: 13px; color: #fff; background: #8b9098; border: 1.5px solid #7a7f87; cursor: not-allowed;
+  }
+  .badge-total-domingo {
+    display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px; background: var(--domingo-suave); color: var(--domingo);
+    border: 1px solid var(--domingo-borde); white-space: nowrap; flex-shrink: 0;
+  }
+  .badge-total-domingo .total-domingo-valor { font-size: 12.5px; }
   .diff-nota { font-size: 10.5px; margin-top: 2px; font-weight: 600; }
   .diff-nota.aviso { color: var(--amber-dark); }
   .diff-nota.alerta { color: var(--danger); }
@@ -1871,6 +1970,22 @@
      toda la fila en amarillo suave para que resalte entre las de siempre. */
   table.conteo tr.fila-entra-excepcion { background: #fff8de !important; }
   table.conteo tr.fila-entra-excepcion td.nombre { color: #7a5417; }
+  /* "Doble salida" (cambio puntual por las dos agrupaciones): la fila de
+     origen en azul muy suave, un aviso bajo el nombre y, en las dos filas,
+     las columnas que rellena la otra agrupación en gris azulado y sin
+     poder escribir en ellas. */
+  table.conteo tr.fila-doble-salida { background: #f3f7fd !important; }
+  table.conteo td.nombre .aviso-doble-salida {
+    font-weight: 700; font-size: 10px; color: #1f4e8c; margin-left: 6px; vertical-align: 1px;
+    background: #e3ecf9; border-radius: 5px; padding: 1px 6px; display: inline-block;
+    white-space: nowrap; cursor: help; letter-spacing: .02em;
+  }
+  table.conteo input.celda.celda-otra-agencia,
+  table.conteo input.celda.celda-otra-agencia:disabled {
+    background: #eaf0f8; border: 1px dashed #a9bddb; color: #6f93c4; cursor: not-allowed;
+  }
+  table.conteo input.celda.celda-otra-agencia::placeholder { color: #8fa9cf; font-weight: 800; }
+  table.conteo input.celda.celda-otra-agencia:focus { box-shadow: none; border-color: #a9bddb; }
 
   .btn-cerrar-tienda {
     background: none; border: none; color: var(--ink-soft); padding: 5px; border-radius: 6px; display: inline-flex;
@@ -1940,6 +2055,10 @@
   /* ---------- Modal de confirmación "peligro" (borrado) ---------- */
   /* Modal "Sin permiso": icono arriba, título en rojo y un solo botón "Aceptar". */
   .modal-box.sin-permiso .modal-cerrar-x { display: none; }
+  /* Modal de cambio OBLIGATORIO de contraseña: no se puede cerrar con la X. */
+  .modal-box.cambio-obligatorio .modal-cerrar-x { display: none; }
+  .modal-box.cambio-obligatorio h3 { padding-right: 0; }
+  .cambio-obligatorio-error { display: none; margin: 4px 0 0; color: var(--danger); font-size: 13px; font-weight: 600; }
   .modal-box.sin-permiso h3 { color: var(--danger); padding-right: 0; }
   .modal-box.sin-permiso h3::before { content: '\26D4'; display: block; font-size: 24px; line-height: 1; margin-bottom: 8px; }
   .modal-box.peligro { border-top: 5px solid var(--danger); }
@@ -2038,6 +2157,95 @@
   .modal-envio-nota {
     font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; margin: 0;
     background: #f9fafb; border-radius: 10px; padding: 11px 13px;
+  }
+
+  /* ---------- Modal "Confirma el número de palets a cargar en el camión" ----------
+     Sale antes del resumen de Previsión/Definitivo si alguna tienda pasa de
+     su límite (ver mostrarModalConfirmarPalets en js/ui-modal.js). */
+  .modal-palets-icono { background: var(--amber); }
+  .modal-palets-intro { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 14px !important; line-height: 1.5; }
+  .modal-palets-tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 4px; }
+  .modal-palets-tabla th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+    color: var(--ink-soft); padding: 0 8px 8px; border-bottom: 1px solid var(--line);
+  }
+  .modal-palets-tabla th.num, .modal-palets-tabla td.num { text-align: center; }
+  .modal-palets-tabla td { padding: 10px 8px; border-bottom: 1px solid var(--line); color: var(--ink); vertical-align: middle; }
+  .modal-palets-tabla td.tienda { font-weight: 700; }
+  .modal-palets-tabla td.total { color: var(--danger); font-weight: 800; }
+  .modal-palets-otros { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-top: 2px; }
+  .modal-palets-ctrl { display: inline-flex; align-items: center; gap: 6px; }
+  .modal-palets-ctrl button {
+    width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: #f6f7f9;
+    color: var(--navy); font-size: 17px; font-weight: 700; cursor: pointer; line-height: 1; padding: 0;
+  }
+  .modal-palets-ctrl button:hover { background: #eef1f7; }
+  .modal-palets-ctrl input {
+    width: 54px; height: 32px; text-align: center; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 15px; font-weight: 800; color: var(--navy); -moz-appearance: textfield;
+  }
+  .modal-palets-ctrl input::-webkit-outer-spin-button,
+  .modal-palets-ctrl input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .modal-palets-ctrl input:focus { outline: none; border-color: var(--navy-soft); box-shadow: 0 0 0 3px rgba(44,62,94,.12); }
+  .modal-palets-ctrl input.pasado { border-color: var(--danger); color: var(--danger); background: #fceded; }
+  .modal-palets-quedan { font-size: 11.5px; color: var(--amber-dark); font-weight: 600; margin-top: 4px; min-height: 14px; }
+  .modal-palets-quedan.pasado { color: var(--danger); }
+  @media (max-width: 560px) {
+    .modal-palets-tabla th, .modal-palets-tabla td { padding-left: 4px; padding-right: 4px; }
+    .modal-palets-ctrl { gap: 4px; }
+    .modal-palets-ctrl input { width: 44px; }
+  }
+
+  /* ---------- Modal "Lista de carga" (camioncito de la cabecera) ---------- */
+  .modal-lista-estado {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+    border-radius: 20px; padding: 3px 10px; background: #eaf7ef; color: #1f7a45; margin-bottom: 14px;
+  }
+  .modal-lista-estado.prevision { background: #fdf6ea; color: var(--amber-dark); }
+  .modal-lista-estado.ajuste { background: #eef1f7; color: var(--navy); }
+  .modal-lista-tabla td.cargar.revisar { color: var(--danger); }
+  .modal-lista-tabla tr.revisar td, .modal-palets-tabla tr.revisar td { background: #fff8f8; }
+  .modal-lista-tabla tr.ajustada td.tienda::after {
+    content: 'Ajustada'; margin-left: 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--navy); background: #eef1f7; border-radius: 20px; padding: 2px 7px; vertical-align: 1px;
+  }
+  .modal-carga-cambio {
+    display: inline-flex; align-items: center; margin-top: 4px; font-size: 11px; font-weight: 700;
+    color: var(--danger); background: #fceded; border-radius: 20px; padding: 2px 8px;
+  }
+  .modal-carga-solo-lectura {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+    background: #eef1f5; border-radius: 10px; padding: 10px 13px; margin-bottom: 14px;
+  }
+  .modal-carga-solo-lectura svg { flex-shrink: 0; }
+  .modal-envio-aviso.modal-carga-info { background: #eef1f7; color: var(--navy); }
+  .modal-envio-cabecera-icono.ambar { background: var(--amber); }
+  .modal-envio-cabecera-icono.rojo { background: var(--danger); }
+  .modal-palets-tabla td.contados { font-weight: 800; }
+  .modal-palets-tabla td.contados.pasado { color: var(--danger); }
+  .modal-tabla-scroll { overflow-x: auto; }
+  .modal-actions .izq { margin-right: auto; }
+  .modal-actions .modal-secundario { background: #fff; color: var(--navy); box-shadow: inset 0 0 0 1.5px #cdd5e3; }
+  .modal-actions .modal-enlace {
+    background: none; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px;
+    padding-left: 4px; padding-right: 4px;
+  }
+  .modal-actions .modal-enlace:hover { color: var(--ink); filter: none; }
+  .modal-lista-tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .modal-lista-tabla th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+    color: var(--ink-soft); padding: 0 10px 8px; border-bottom: 1px solid var(--line);
+  }
+  .modal-lista-tabla th.num, .modal-lista-tabla td.num { text-align: center; width: 110px; }
+  .modal-lista-tabla td { padding: 10px; border-bottom: 1px solid var(--line); color: var(--ink); }
+  .modal-lista-tabla td.tienda { font-weight: 700; }
+  .modal-lista-tabla td.cargar { font-weight: 800; font-size: 16px; color: var(--navy); }
+  .modal-lista-tabla td.sobra { font-weight: 800; color: var(--amber-dark); }
+  .modal-lista-tabla td.sobra.cero { color: #b3b8c2; font-weight: 600; }
+  .modal-lista-tabla tr.cerrada td { color: var(--danger); font-weight: 700; }
+  .modal-lista-tabla tfoot td { background: #f6f7f9; font-weight: 800; border-bottom: none; border-top: 2px solid var(--ink); }
+  @media (max-width: 560px) {
+    .modal-lista-tabla th.num, .modal-lista-tabla td.num { width: 72px; }
   }
 
   .modal-cargando {
@@ -2145,6 +2353,61 @@
     .instalar-banner-texto span { font-size: 12px; }
   }
 
+  /* ---------- Modal de instalación obligatoria (PWA, igual que en GIDT) ---------- */
+  .instalar-overlay {
+    position: fixed; inset: 0; z-index: 10000; /* por encima de todo, incluido el login */
+    background: rgba(14,20,30,.72);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .instalar-overlay.show { display: flex; }
+  .instalar-modal-box {
+    width: 100%; max-width: 420px; margin: auto;
+    background: var(--panel); border-radius: 16px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.45);
+    padding: 34px 30px 28px; text-align: center;
+  }
+  .instalar-modal-icono {
+    position: relative; width: 72px; height: 72px; margin: 0 auto 18px;
+  }
+  .instalar-modal-icono img { width: 72px; height: 72px; border-radius: 16px; display: block; }
+  .instalar-modal-icono::after {
+    content: '⬇';
+    position: absolute; right: -8px; bottom: -8px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--amber); color: #fff;
+    font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--panel);
+  }
+  .instalar-modal-titulo { margin: 0 0 8px; font-size: 19px; font-weight: 700; color: var(--navy); }
+  .instalar-modal-mensaje { margin: 0 0 18px; font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
+  .instalar-modal-pasos {
+    text-align: left; background: var(--bg); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 16px; font-size: 13px; color: var(--ink);
+  }
+  .instalar-modal-pasos b { display: block; margin-bottom: 8px; font-size: 13px; }
+  .instalar-modal-pasos ol { margin: 0; padding-left: 18px; }
+  .instalar-modal-pasos li { margin-bottom: 6px; color: var(--ink-soft); line-height: 1.45; }
+  .instalar-modal-pasos li:last-child { margin-bottom: 0; }
+  .instalar-modal-pasos li b { display: inline; color: var(--ink); }
+  .instalar-modal-ayuda {
+    display: none; text-align: left; background: #fdf3e4; color: var(--amber-dark);
+    border-radius: var(--radius); padding: 11px 13px; margin: 0 0 18px; font-size: 12.5px; line-height: 1.5;
+  }
+  .instalar-modal-botones { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .instalar-btn {
+    width: 100%; padding: 13px; border-radius: 10px; border: 1px solid transparent;
+    font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+  }
+  .instalar-btn-principal { background: var(--amber); border-color: var(--amber); color: #fff; }
+  .instalar-btn-principal:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
+  .instalar-btn-principal:disabled { opacity: .7; cursor: default; }
+  .instalar-btn-secundario { background: var(--bg); border-color: var(--line); color: var(--ink-soft); font-size: 12px; }
+  .instalar-btn-secundario:hover { background: var(--line); }
+  @media print { .instalar-overlay { display: none !important; } }
+
   /* Toast */
   #toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -2160,6 +2423,21 @@
     gap: 14px; text-align: center; padding: 50px 20px; color: var(--ink-soft); font-size: 14px;
   }
   .loader .spinner-navy { display: block; }
+  /* Spinner pequeño para los "Cargando…" en línea (tarjetas de inicio,
+     resumen, acceso rápido, buscador del gestor). */
+  .spinner-mini {
+    display: inline-block; width: 13px; height: 13px; border-radius: 50%; vertical-align: -2px;
+    border: 2px solid #e3e7ee; border-top-color: var(--navy); animation: girar .7s linear infinite;
+    margin-right: 7px; flex-shrink: 0;
+  }
+  .cargando-linea { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
+  /* Aviso si una carga pasa de 15 s (ver revisarCargasLentas_ en utilidades.js). */
+  .carga-lenta { flex-basis: 100%; font-size: 12px; color: var(--amber-dark); margin-top: 8px; text-align: center; }
+  .carga-lenta-btn {
+    background: none; border: 1px solid currentColor; color: inherit; border-radius: 6px;
+    padding: 2px 8px; font-size: 12px; font-weight: 700; cursor: pointer; margin-left: 2px;
+  }
+  .carga-lenta-btn:hover { background: #fdf3e6; }
 
   /* ---------- Modal "Añadir observación" (algo más ancho que el estándar,
      para que quepan bien las píldoras de tipo y los chips de selección) ---- */
@@ -2248,7 +2526,46 @@
   .gestor-tipo-pill:hover:not(.activa):not(:disabled) { background: #f0f2f6; }
   .gestor-tipo-pill.activa { background: var(--navy); border-color: var(--navy); color: #fff; }
   .gestor-tipo-pill:disabled { opacity: .4; cursor: not-allowed; }
+  /* Desplegables del gestor (agrupación destino y plazo del cambio puntual). */
+  .gestor-campo select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; font-family: inherit; color: var(--ink); background: #fff;
+  }
+  .gestor-campo select:focus { outline: none; border-color: var(--navy-soft); box-shadow: 0 0 0 3px rgba(44,62,94,.1); }
+  .modal-box.gestor-obs .gestor-campo select { font-size: 15px; padding: 11px 13px; }
+  /* Píldoras del paso "¿Por dónde sale?" y de columnas de la doble salida. */
+  .gestor-tipo-pills.gestor-pills-2 { grid-template-columns: repeat(2, 1fr) !important; }
+  .gestor-tipo-pills.gestor-pills-3 { grid-template-columns: repeat(3, 1fr) !important; }
+  .modal-box.gestor-obs .gestor-tipo-pills.gestor-pills-2 .gestor-tipo-pill,
+  .modal-box.gestor-obs .gestor-tipo-pills.gestor-pills-3 .gestor-tipo-pill { padding: 11px 8px; font-size: 13px; }
+
+  /* Columnas del gestor: por defecto no se notan (todo en una columna, como
+     siempre). En "Cambio puntual" y pantalla ancha, el modal se ensancha y
+     se reparte en dos columnas para que no crezca tanto en altura. */
+  .gestor-col { display: contents; }
+  .gestor-der-vacio {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 18px 16px;
+    font-size: 12.5px; color: var(--ink-soft); text-align: center; line-height: 1.5;
+  }
+  @media (min-width: 900px) {
+    .modal-box.gestor-obs.gestor-ancho { max-width: 1040px; }
+    .modal-box.gestor-obs .gestor-form.gestor-form-cambio {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; align-items: start;
+    }
+    .gestor-form.gestor-form-cambio .gestor-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+    .modal-box.gestor-obs .gestor-form-cambio .gestor-tipo-principal,
+    .modal-box.gestor-obs .gestor-form-cambio #gestor-transito-campo .gestor-tipo-pills { grid-template-columns: repeat(2, 1fr); }
+  }
+  /* Fila de naves de la agrupación de siempre: las que no van por la
+     destino están fijas (salen siempre por aquí) y no se pueden quitar. */
+  .gestor-tipo-pill.gestor-origen-pill.fija { cursor: default; opacity: .85; }
+  .gestor-doble-resumen {
+    margin-top: 14px; border: 1px solid var(--line); background: #f9fafb; border-radius: 10px;
+    padding: 10px 12px; font-size: 13px; line-height: 1.6; color: var(--ink);
+  }
+  .gestor-doble-resumen-nota { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
   @media (max-width: 480px) {
+    .gestor-tipo-pills.gestor-pills-2 { grid-template-columns: 1fr !important; }
     .gestor-tipo-pills { grid-template-columns: 1fr; }
     .gestor-tipo-pill { flex-direction: row; justify-content: flex-start; padding: 9px 12px; }
   }
@@ -2446,6 +2763,11 @@
   .avisos-verif-resuelto { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; color: var(--ok); }
   .avisos-verif-ir { align-self: flex-start; background: none; border: none; padding: 0; color: var(--prevision); font-size: 12px; font-weight: 700; cursor: pointer; }
   .avisos-verif-ir:hover { text-decoration: underline; }
+  .avisos-verif-borrar {
+    align-self: flex-start; flex-shrink: 0; background: none; border: none; padding: 4px; border-radius: 6px;
+    color: var(--ink-soft); cursor: pointer; display: inline-flex;
+  }
+  .avisos-verif-borrar:hover { color: var(--danger); background: #fceded; }
   .avisos-verif-vacio { padding: 22px 16px; text-align: center; color: var(--ink-soft); font-size: 13px; }
   .avisos-verif-toast {
     position: fixed; left: 20px; bottom: 20px; width: 400px; max-width: calc(100vw - 40px); z-index: 320;
@@ -2495,6 +2817,7 @@
   .nota-chip .del,
   .btn-cerrar-tienda,
   .btn-reabrir,
+  .festivos-edit,
   .festivos-del {
     display: none !important;
   }
@@ -2507,6 +2830,7 @@
   body.perm-festivos .nota-chip .del { display: inline-block !important; }
   body.es-admin .btn-cerrar-tienda, body.perm-cierres .btn-cerrar-tienda { display: inline-flex !important; }
   body.es-admin .festivos-del, body.perm-festivos .festivos-del { display: inline-flex !important; }
+  body.es-admin .festivos-edit, body.perm-festivos .festivos-edit { display: inline-flex !important; }
   body.es-admin .btn-reabrir, body.perm-cierres .btn-reabrir { display: inline-block !important; }
 
   /* ---------- ADMINISTRACIÓN (admin, u operario con algún permiso de ese menú) ----------
@@ -2781,6 +3105,7 @@
     .hi-tabla td.hi-nombre { text-align: left; font-weight: 700; white-space: nowrap; }
     .hi-tabla td.hi-blanco { height: 20px; } /* celda vacía para rellenar a mano */
     .hi-tabla td.hi-no { font-weight: 800; line-height: 1; } /* "NO" de origen: se marca con X en vez de dejarla en blanco, sin agrandar la fila */
+    .hi-tabla td.hi-viernes-excluida { background: #c8c8c8; -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* tienda excluida del VIERNES: gris con X, como en el Excel */
 
     /* Fila de cabecera de una agrupación de rutas (p.ej. "INGENIO + INGENIO
        2"): fondo más marcado, borde superior grueso para que se note dónde
@@ -2816,3 +3141,146 @@
     .hi-orden-tabla td { border: none; padding: 1px 0; }
     .hi-orden-tabla td.hi-orden-num { width: 16px; font-weight: 700; }
   }
+
+/* ---------- Ventana "Acerca de" (al pulsar el logo) — js/acerca-de.js ---------- */
+.abre-acerca-de { cursor: pointer; }
+.login-logo.abre-acerca-de { transition: transform .15s; }
+.login-logo.abre-acerca-de:hover { transform: scale(1.05); }
+header.topbar .brand.abre-acerca-de:hover { opacity: .85; }
+.modal-box.acerca-de { max-width: 440px; padding: 0; overflow-x: hidden; }
+.modal-box.acerca-de .modal-cerrar-x { color: rgba(255,255,255,.75); }
+.modal-box.acerca-de .modal-cerrar-x:hover { background: rgba(255,255,255,.12); color: #fff; }
+.acerca-cabecera {
+  background: linear-gradient(160deg, var(--navy) 0%, #0f1a2c 100%);
+  padding: 30px 28px 22px; text-align: center; color: #fff;
+}
+.acerca-logo {
+  width: 56px; height: 56px; border-radius: 15px; margin: 0 auto 12px;
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center;
+}
+.acerca-logo svg { width: 28px; height: 28px; }
+.acerca-nombre { font-size: 17px; font-weight: 700; letter-spacing: .4px; }
+.acerca-nombre span { color: var(--amber); }
+.acerca-version { font-size: 12.5px; color: rgba(255,255,255,.65); margin-top: 4px; min-height: 16px; }
+.acerca-cuerpo { padding: 20px 26px 6px; }
+.acerca-campo { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+.acerca-campo .lbl { font-size: 11px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .4px; }
+.acerca-campo .val { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.acerca-clave {
+  font-family: var(--mono); font-size: 13.5px; letter-spacing: .6px; text-align: center;
+  background: #f6f7fa; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px;
+  color: var(--ink); user-select: all;
+}
+.acerca-activado { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ok); margin-top: 3px; }
+.acerca-legal { border-top: 1px solid var(--line); margin: 0 26px; padding-top: 14px; }
+.modal-box.acerca-de .acerca-legal p { font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); margin: 0 0 8px; white-space: normal; text-align: left; }
+.modal-box.acerca-de .acerca-legal p.acerca-copy { font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+.acerca-copy span { display: block; font-weight: 600; color: var(--ink-soft); }
+.modal-box.acerca-de .modal-actions { padding: 0 26px 22px; margin-top: 10px; }
+
+/* ---- Rutas y tiendas: arrastrar tiendas (sustituye a las flechas) ---- */
+.plantilla-tienda-asa {
+  width: 22px; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  color: #9aa3b0; border-radius: 5px; cursor: grab; touch-action: none; user-select: none;
+}
+.plantilla-tienda-asa:hover { background: #eef1f7; color: var(--navy); }
+.plantilla-tienda-asa-hueco { width: 22px; flex-shrink: 0; }
+.plantilla-tienda.arrastrando {
+  position: relative; z-index: 3; background: #fff; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(28, 43, 69, .25); outline: 2px solid var(--prevision);
+}
+.plantilla-tienda.arrastrando .plantilla-tienda-asa { color: var(--navy); background: #eef1f7; cursor: grabbing; }
+body.plantilla-arrastrando, body.plantilla-arrastrando * { cursor: grabbing !important; user-select: none !important; }
+.plantilla-tienda.recien-movida { background: #eef4fd; }
+body.plantilla-guardando-orden .plantilla-tienda-asa { opacity: .4; cursor: progress; }
+
+/* Modal "Esta tienda aparece en más días" al soltar */
+.plantilla-dias-destino { display: flex; flex-direction: column; gap: 6px; }
+.plantilla-dia-destino {
+  display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; cursor: pointer;
+}
+.plantilla-dia-destino input { width: 16px; height: 16px; accent-color: var(--ok); flex-shrink: 0; }
+.plantilla-dia-destino b { min-width: 84px; }
+.plantilla-dia-destino .det { color: var(--ink-soft); font-size: 12.5px; }
+.plantilla-dia-destino.deshabilitado { cursor: default; background: #f7f8fa; }
+.plantilla-dia-destino-ok, .plantilla-dia-destino-av { width: 16px; text-align: center; font-weight: 800; flex-shrink: 0; }
+.plantilla-dia-destino-ok { color: var(--ok); }
+.plantilla-dia-destino-av { color: var(--amber-dark); }
+
+/* Grupos de palets: copiar a otros días */
+.plantilla-grupos-dias { border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 12px; }
+.plantilla-grupos-dias-titulo { display: block; font-weight: 700; font-size: 13px; color: var(--ink); }
+.modal-anadir-tienda-dia-pill.igual { cursor: default; background: #f1f7f4; color: var(--ok); border-color: #cfe6dc; }
+.plantilla-grupos-cambios {
+  margin-top: 10px; background: #fdf8ef; border: 1px solid #f0dcb8; border-radius: 8px; padding: 9px 12px;
+}
+.plantilla-grupos-cambios-cab { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.plantilla-grupos-cambios-cab span { margin-left: auto; color: var(--amber-dark); font-weight: 700; font-size: 12px; white-space: nowrap; }
+.plantilla-grupos-cambios-lista { margin-top: 6px; font-size: 12.5px; line-height: 1.6; color: var(--ink); }
+.plantilla-grupos-cambios-lista s { color: var(--danger); }
+.plantilla-grupos-cambios-lista ins { color: var(--ok); text-decoration: none; font-weight: 700; }
+
+/* Añadir tienda: límite general + posición y grupo */
+.plantilla-caja-limite {
+  display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: #f6f7f9;
+  border-radius: 8px; padding: 9px 12px; font-size: 13px; min-height: 22px;
+}
+.plantilla-caja-limite .num { font-weight: 800; font-size: 18px; color: var(--navy); min-width: 24px; text-align: center; }
+.plantilla-anadir-colocar { display: flex; gap: 12px; flex-wrap: wrap; }
+.plantilla-anadir-colocar .modal-campo { flex: 1 1 200px; min-width: 0; }
+.plantilla-anadir-colocar select { width: 100%; }
+
+/* Grupos de palets en dos columnas: a la izquierda los grupos (solo con
+   sus tiendas), a la derecha las tiendas sin grupo + copiar a otros días.
+   Así no hay que hacer scroll por una lista de todas las tiendas repetida
+   en cada grupo. */
+.modal-box.orden-retirada-modal:has(.grupos2) { max-width: 1120px; width: calc(100vw - 32px); }
+.grupos2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.grupos2-col { display: flex; flex-direction: column; min-width: 0; }
+.grupos2-lista { display: flex; flex-direction: column; gap: 8px; }
+.grupos2-card {
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fbfcfe; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.grupos2-card.activo { border-color: var(--ok); box-shadow: 0 0 0 2px rgba(47, 143, 111, .18); background: #fff; }
+.grupos2-card-cab { display: flex; align-items: center; gap: 6px; }
+.grupos2-radio {
+  width: 14px; height: 14px; border-radius: 50%; border: 2px solid #b9c0cb; flex-shrink: 0;
+}
+.grupos2-card.activo .grupos2-radio { border-color: var(--ok); background: radial-gradient(var(--ok) 45%, #fff 50%); }
+.grupos2-card-cab input[type="text"] {
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font-size: 13px; background: #fff; min-width: 0;
+}
+.grupos2-card-cab input[type="text"]:focus { border-color: var(--navy-soft); outline: none; }
+.grupos2-texto { flex: 1 1 auto; font-weight: 700; }
+.grupos2-limite { width: 82px; flex: 0 0 82px; }
+.grupos2-tipo { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.grupos2-tipo input { width: 14px; height: 14px; }
+.grupos2-contador {
+  font-size: 11px; font-weight: 800; color: var(--amber-dark); background: #fbf1e2; border-radius: 10px;
+  padding: 2px 7px; flex-shrink: 0;
+}
+.grupos2-card .modal-grupo-eliminar { flex-shrink: 0; }
+.grupos2-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.grupos2-chip {
+  border: 1px solid var(--line); border-radius: 14px; padding: 3px 9px; font-size: 11.5px; background: #fff;
+  color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; line-height: 1.4;
+}
+.grupos2-chip.miembro { background: #fbf1e2; border-color: #e3bf86; }
+.grupos2-chip.miembro .x { color: var(--ink-soft); font-weight: 700; }
+.grupos2-chip.miembro:hover { background: #fceded; border-color: var(--danger); }
+.grupos2-chip.libre:hover { background: #eaf5f0; border-color: var(--ok); color: var(--ok); }
+.grupos2-vacio { font-size: 12px; color: var(--ink-soft); }
+.grupos2-pool { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
+.grupos2-pool .grupos2-chips { margin-top: 4px; }
+.grupos2-destino { font-size: 12px; color: var(--ink-soft); }
+.grupos2-destino b { color: var(--ok); }
+.grupos2 .plantilla-grupos-dias { margin-top: 12px; }
+@media (max-width: 760px) {
+  .grupos2 { grid-template-columns: 1fr; }
+  .grupos2-card-cab { flex-wrap: wrap; }
+  .grupos2-texto { flex-basis: calc(100% - 30px); }
+}
+.grupos2 .plantilla-grupos-dias p { font-size: 12px; }
