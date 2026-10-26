@@ -525,9 +525,13 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     // Candado de la cabecera (solo si la agrupación aún se puede tocar).
     const candado = header.querySelector('.btn-candado-carga');
     if (candado) {
-      candado.hidden = !(hay && editable);
+      const defHoy = definitivoDesbloqueable_();
+      candado.hidden = !((hay && editable) || defHoy);
       const quien = quienAjusto_();
-      candado.title = esAdmin()
+      if (defHoy) candado.title = esAdmin()
+        ? 'Definitivo enviado. Pulsa para desbloquearlo (deshace el envío; solo el mismo día).'
+        : 'Definitivo enviado: solo un administrador puede desbloquearlo.';
+      else candado.title = esAdmin()
         ? 'Conteo bloqueado por la carga ajustada' + (quien ? ' (' + quien + ')' : '') + '. Pulsa para desbloquearlo.'
         : 'Conteo bloqueado: la carga la ha ajustado un responsable' + (quien ? ' (' + quien + ')' : '') + '.';
     }
@@ -645,7 +649,61 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
 
   // Candado: el administrador desbloquea (con confirmación); el resto solo
   // ve quién lo bloqueó.
+  // Con el definitivo ya enviado HOY, el mismo candado sirve para
+  // desbloquearlo (lo que antes hacía la papelera "Deshacer envío"):
+  // se quita la marca de enviado y se recuperan los datos para editar.
+  function definitivoDesbloqueable_() {
+    return seccion.estado === 'enviado' && !!esHoy;
+  }
+  function desbloquearDefinitivo_() {
+    const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
+    if (!esAdmin()) {
+      appConfirm('Definitivo enviado',
+        'El definitivo de ' + titulo + ' ya está enviado' + (seccion.enviadoPor ? ' (por ' + seccion.enviadoPor + ')' : '') +
+        ' y el conteo está bloqueado. Si hay que cambiar algo, pide a un administrador que lo desbloquee.', function () {});
+      const btnOk = document.getElementById('modal-confirm-btn');
+      if (btnOk) btnOk.textContent = 'Entendido';
+      const btnNo = document.getElementById('modal-cancel-btn');
+      if (btnNo) btnNo.style.display = 'none';
+      return;
+    }
+    // "Deshacer envío" todavía no está pasado a Supabase (no hay acción
+    // deshacerEnvioSeccion en SUPABASE_ACCIONES_): se avisa claro en vez de
+    // dejar que falle. En cuanto exista, el candado funciona solo.
+    if (typeof SUPABASE_ACCIONES_ === 'undefined' || !SUPABASE_ACCIONES_.deshacerEnvioSeccion) {
+      appConfirm('Desbloquear definitivo',
+        'Todavía no se puede desbloquear un definitivo desde la app: falta preparar en la base de datos la función para deshacer el envío.', function () {});
+      const btnOk1 = document.getElementById('modal-confirm-btn');
+      if (btnOk1) btnOk1.textContent = 'Entendido';
+      const btnNo1 = document.getElementById('modal-cancel-btn');
+      if (btnNo1) btnNo1.style.display = 'none';
+      return;
+    }
+    appConfirm('Desbloquear definitivo',
+      '¿Seguro que quieres desbloquear ' + titulo + '? Se deshará el envío del definitivo: se quitará la marca de enviado y se recuperarán los datos para poder seguir editándolos. ' +
+      'El email que ya se mandó a la agencia no se puede recuperar. Si la carga estaba ajustada, seguirá ajustada (y bloqueada para los operarios) hasta que la desbloquees también. ' +
+      'Solo se puede hacer el mismo día en que se envió.',
+      function () {
+        const candado = header.querySelector('.btn-candado-carga');
+        if (candado) candado.disabled = true;
+        google.script.run
+          .withSuccessHandler(function () {
+            if (candado) candado.disabled = false;
+            cargarConteoDia();
+            cargarCalendario();
+          })
+          .withFailureHandler(function (err) {
+            if (candado) candado.disabled = false;
+            mostrarErrorServidor(err);
+          })
+          .deshacerEnvioSeccion(dia, seccion.nombre, fecha);
+      },
+      true);
+    const btnOk = document.getElementById('modal-confirm-btn');
+    if (btnOk) btnOk.textContent = 'Desbloquear';
+  }
   function pulsarCandado_() {
+    if (definitivoDesbloqueable_()) { desbloquearDefinitivo_(); return; }
     if (!hayCargaAjustada_()) return;
     const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
     const quien = quienAjusto_();
@@ -660,12 +718,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       return;
     }
     const cams = camionesCarga_() || [];
-    const hayDivididas = cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; });
+    const seQuitanCamiones = cams.length > 0 && camionesTrasDesbloquear_() === null;
     appConfirm('Desbloquear carga',
       '¿Seguro que quieres desbloquear la carga de ' + titulo + '? ' +
       'Se borrará la carga ajustada (' + totalCargaAjustada_() + ' palets)' + (quien ? ', hecha por ' + quien + ',' : '') +
       ' y la app volverá a mostrar el conteo real (' + totalContadoAhora_() + ' palets). ' +
-      (hayDivididas ? 'También se quitará el reparto de tiendas entre camiones. ' : (cams.length ? 'Los camiones y matrículas se conservan. ' : '')) +
+      (seQuitanCamiones ? 'También se quitarán los camiones y matrículas (con lo contado no cuadran: tiendas divididas o más de 33 palets en un camión). ' : (cams.length ? 'Los camiones y matrículas se conservan. ' : '')) +
       'Los operarios podrán volver a modificar el conteo. Si después hace falta, habrá que ajustar la carga otra vez.',
       desbloquearCarga_, true);
     const btnOk = document.getElementById('modal-confirm-btn');
@@ -674,14 +732,27 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   // Desbloquear = guardar la carga igual a lo contado ahora en todas las
   // tiendas (sin ajustes ni tiendas divididas): deja de haber carga
   // ajustada y con ello el bloqueo, en todos los ordenadores.
+  // Camiones que se conservan al desbloquear: los mismos, sin repartos. Si
+  // había tiendas divididas, o con lo contado algún camión pasaría de 33
+  // palets (la base de datos no lo deja guardar), se quitan los camiones.
+  function camionesTrasDesbloquear_() {
+    const cams = camionesCarga_() || [];
+    if (!cams.length) return [];
+    if (cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; })) return null;
+    const contados = {};
+    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) contados[f.nombre] = Number(f.contados) || 0; });
+    const pasado = cams.some(function (c) {
+      return (Array.isArray(c.tiendas) ? c.tiendas : []).reduce(function (s, t) { return s + (contados[t] || 0); }, 0) > 33;
+    });
+    if (pasado) return null;
+    return cams.map(function (c) {
+      return { matricula: c.matricula || '', remolque: c.remolque || '', tiendas: Array.isArray(c.tiendas) ? c.tiendas : [], parciales: {} };
+    });
+  }
   function desbloquearCarga_() {
     const cargas = {};
     filasCargaActuales_().forEach(function (f) { if (!f.cerrada) cargas[f.nombre] = f.contados; });
-    let cams = camionesCarga_() || [];
-    const hayDivididas = cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; });
-    cams = hayDivididas ? [] : cams.map(function (c) {
-      return { matricula: c.matricula || '', remolque: c.remolque || '', tiendas: Array.isArray(c.tiendas) ? c.tiendas : [], parciales: {} };
-    });
+    const cams = camionesTrasDesbloquear_() || [];
     guardarCarga_(cargas, cams, function (ok) {
       if (!ok) return;
       cerrarModal();
