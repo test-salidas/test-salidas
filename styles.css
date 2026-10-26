@@ -1968,6 +1968,20 @@
     color: var(--ink-soft); font-size: 11.5px; font-weight: 600;
   }
   .menu-envios-aviso[hidden] { display: none; }
+  /* Menú de descargas (PDF / Excel / PDF especial): mismos botones de antes como opciones. */
+  .btn-menu-descargas { color: var(--navy); border-color: #d6dce8; }
+  .btn-menu-descargas:hover, .btn-menu-descargas.activo { background: #eef1f7; }
+  .menu-envios .menu-item {
+    display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: auto; text-align: left;
+    background: none; border: none; border-radius: 8px; padding: 9px 12px;
+    font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer;
+  }
+  .menu-envios .menu-item:hover { background: #eef1f5; }
+  .menu-envios .menu-item:disabled { opacity: .5; cursor: wait; }
+  .menu-envios .menu-item svg { flex-shrink: 0; }
+  /* Segunda línea de la cabecera: fuera si no tiene nada (sin hueco en blanco). */
+  .seccion-header-meta[hidden] { display: none; }
+  .seccion-header-top .verif-wrap { display: inline-flex; flex-shrink: 0; }
 
   /* CANDADO: conteo bloqueado porque la carga está ajustada. Rojo; el
      administrador lo pulsa para desbloquear, el resto ve quién lo bloqueó. */
