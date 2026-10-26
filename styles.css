@@ -2002,6 +2002,31 @@
   }
   .aviso-carga-bloqueada[hidden] { display: none; }
   .aviso-carga-bloqueada svg { flex-shrink: 0; }
+  .aviso-carga-bloqueada { flex-wrap: wrap; font-weight: 500; }
+  .aviso-carga-bloqueada b { font-weight: 800; }
+  .aviso-carga-texto { flex: 1 1 auto; min-width: 0; }
+  .aviso-carga-accion { font-size: 11.5px; font-weight: 700; color: var(--danger); white-space: nowrap; }
+
+  /* Modal del candado (ver mostrarModalCandado_ en conteos-panel.js). */
+  .candado-modal { display: flex; flex-direction: column; gap: 14px; }
+  .candado-modal-cab { display: flex; align-items: center; gap: 12px; }
+  .candado-modal-cab > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .candado-modal-icono {
+    width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #fceded; color: var(--danger);
+  }
+  .candado-modal-icono svg { width: 20px; height: 20px; }
+  .candado-modal-icono.abierto { background: #eef1f7; color: var(--navy); }
+  .candado-modal-titulo { font-size: 16px; font-weight: 800; color: var(--navy); line-height: 1.25; }
+  .candado-modal-sub { font-size: 12.5px; color: var(--ink-soft); }
+  .candado-modal-ficha { border: 1px solid var(--line); border-radius: 10px; background: #f8f9fb; padding: 4px 14px; }
+  .candado-modal-fila { display: flex; gap: 12px; padding: 7px 0; font-size: 13px; }
+  .candado-modal-fila + .candado-modal-fila { border-top: 1px solid var(--line); }
+  .candado-modal-etq { width: 64px; flex-shrink: 0; color: var(--ink-soft); font-weight: 600; }
+  .candado-modal-val { color: var(--ink); font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+  .candado-modal-puntos { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--ink); }
+  .candado-modal-nota { font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
   .table-wrap[hidden] { display: none; }
 
   /* Casillas apagadas por el bloqueo (operarios). */
