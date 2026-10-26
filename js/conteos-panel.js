@@ -1983,17 +1983,85 @@ function mostrarModalCandado_(opts) {
       (opts.nota ? '<div class="candado-modal-nota">' + escapeHtml(opts.nota) + '</div>' : '') +
     '</div>';
   const actions = document.getElementById('modal-actions');
-  actions.innerHTML = opts.onConfirmar
-    ? '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
-      '<button class="modal-confirm danger" id="modal-confirm-btn">' + escapeHtml(opts.textoBoton || 'Desbloquear') + '</button>'
-    : '<button class="modal-confirm" id="modal-confirm-btn">Entendido</button>';
+  if (!opts.onConfirmar) {
+    actions.innerHTML = '<button class="modal-confirm" id="modal-confirm-btn">Entendido</button>';
+    document.getElementById('modal-overlay').style.display = 'flex';
+    document.getElementById('modal-confirm-btn').onclick = cerrarModal;
+    return;
+  }
+  // Por seguridad, desbloquear no es un botón: hay que ARRASTRAR el
+  // candado hasta el final de la barra. Si se suelta antes, vuelve.
+  actions.innerHTML =
+    '<div class="desliza-fila">' +
+      '<div class="desliza" role="slider" aria-label="' + escapeAttr(opts.textoBoton || 'Desliza para desbloquear') + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">' +
+        '<span class="desliza-relleno"></span>' +
+        '<span class="desliza-texto">' + escapeHtml(opts.textoBoton || 'Desliza para desbloquear') + ' &#8594;</span>' +
+        '<span class="desliza-mando" tabindex="0" title="Arrastra hasta el final para desbloquear">' + SVG_CANDADO_CARGA_ + '</span>' +
+      '</div>' +
+      '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
+    '</div>';
   document.getElementById('modal-overlay').style.display = 'flex';
-  const btnNo = document.getElementById('modal-cancel-btn');
-  if (btnNo) btnNo.onclick = cerrarModal;
-  document.getElementById('modal-confirm-btn').onclick = function () {
+  document.getElementById('modal-cancel-btn').onclick = cerrarModal;
+  activarDeslizador_(actions.querySelector('.desliza'), function () {
     cerrarModal();
-    if (opts.onConfirmar) opts.onConfirmar();
-  };
+    opts.onConfirmar();
+  });
+}
+
+/** Barra "desliza para desbloquear": arrastrar el mando (ratón o dedo)
+ *  hasta el final llama a onCompleto. Sin animaciones (en algunos PCs no
+ *  se ven): el mando sigue al puntero y, si se suelta antes, vuelve. Con
+ *  teclado: flecha derecha avanza a pasos, flecha izquierda retrocede. */
+function activarDeslizador_(barra, onCompleto) {
+  const mando = barra.querySelector('.desliza-mando');
+  const relleno = barra.querySelector('.desliza-relleno');
+  const texto = barra.querySelector('.desliza-texto');
+  let max = 0, x = 0, inicio = null, hecho = false;
+  function medir() { max = Math.max(0, barra.clientWidth - mando.offsetWidth - 8); }
+  function poner(v) {
+    x = Math.max(0, Math.min(max, v));
+    mando.style.transform = 'translateX(' + x + 'px)';
+    relleno.style.width = (x + mando.offsetWidth + 4) + 'px';
+    texto.style.opacity = max ? String(Math.max(0, 1 - x / (max * 0.6))) : '1';
+    barra.setAttribute('aria-valuenow', String(max ? Math.round(x / max * 100) : 0));
+  }
+  function completar() {
+    if (hecho) return;
+    hecho = true;
+    poner(max);
+    barra.classList.add('completo');
+    mando.innerHTML = SVG_CANDADO_ABIERTO_;
+    setTimeout(onCompleto, 120);
+  }
+  function soltar() {
+    if (inicio === null || hecho) return;
+    inicio = null;
+    barra.classList.remove('arrastrando');
+    if (x >= max * 0.95) completar(); else poner(0);
+  }
+  mando.addEventListener('pointerdown', function (e) {
+    if (hecho) return;
+    e.preventDefault();
+    medir();
+    inicio = e.clientX - x;
+    barra.classList.add('arrastrando');
+    try { mando.setPointerCapture(e.pointerId); } catch (err) { /* navegadores antiguos */ }
+  });
+  mando.addEventListener('pointermove', function (e) {
+    if (inicio === null || hecho) return;
+    poner(e.clientX - inicio);
+  });
+  mando.addEventListener('pointerup', soltar);
+  mando.addEventListener('pointercancel', soltar);
+  mando.addEventListener('lostpointercapture', soltar);
+  mando.addEventListener('keydown', function (e) {
+    if (hecho) return;
+    medir();
+    if (e.key === 'ArrowRight') { e.preventDefault(); poner(x + max / 5); if (x >= max) completar(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); poner(x - max / 5); }
+  });
+  medir();
+  poner(0);
 }
 
 /** Confirmación del operario antes de verificar su columna: dice qué
