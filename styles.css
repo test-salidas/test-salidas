@@ -1943,6 +1943,11 @@
     display: flex; flex-direction: column; gap: 2px;
   }
   .menu-envios[hidden] { display: none; }
+  /* Camioncito y sobre un poco más grandes, sin cambiar el alto de la línea (28px). */
+  .seccion-header-top .btn-lista-carga,
+  .seccion-header-top .btn-menu-envios { width: 40px; }
+  .seccion-header-top .btn-lista-carga svg,
+  .seccion-header-top .btn-menu-envios svg { width: 21px; height: 21px; }
   .menu-envios .btn-header-prevision,
   .menu-envios .btn-header-definitivo,
   .menu-envios .btn-header-informatica {
