@@ -208,7 +208,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     '<div class="seccion-header-meta">' +
     '<div class="seccion-header-badges">' +
     badgePrevision(seccion) +
-    (seccion.estado === 'enviado' && esHoy ? htmlBotonDeshacerEnvio_() : '') +
+    // La papelera "Deshacer envío" ya no se muestra tras el definitivo.
     (!editable && seccion.estado !== 'enviado' ? '<span class="badge badge-solo-lectura">Solo lectura</span>' : '') +
     '</div>' +
     // Donde antes estaban los botones de envío: las pestañas "Carga
@@ -633,19 +633,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         const kg = n('c60') * PESO_PALET_KG.c60 + n('pta') * PESO_PALET_KG.pta + n('cart') * PESO_PALET_KG.cart;
         pesoIn.value = kg || '';
       }
-      // Aviso de límite de la fila, recalculado con la carga ajustada.
-      tr.classList.remove('fila-aviso', 'fila-alerta');
       tr.classList.add('fila-ajustada');
-      const nota = tr.querySelector('.diff-nota');
-      if (nota) {
-        nota.className = 'diff-nota';
-        const limite = Number(tr.getAttribute('data-limite'));
-        const exceso = limite ? totalVisto - limite : 0;
-        if (exceso >= 3) { tr.classList.add('fila-alerta'); nota.classList.add('alerta'); nota.textContent = '+' + exceso + ' sobre el límite — consultar a informática'; }
-        else if (exceso >= 1) { tr.classList.add('fila-aviso'); nota.classList.add('aviso'); nota.textContent = '+' + exceso + ' sobre el límite — ceñirse al límite'; }
-        else { nota.classList.add('ajuste'); nota.textContent = 'Contado ' + contados + ' → ' + (esCargaEnviada_() ? 'enviado ' : 'carga ') + cargar; }
-      }
     });
+    // La vista de la carga va "a pelo": sin avisos de límite ni notas
+    // debajo del TOTAL (eso se ve en "Ver conteo real sin ajustar").
+    tabla.querySelectorAll('tbody tr').forEach(function (tr) { tr.classList.remove('fila-aviso', 'fila-alerta'); });
+    tabla.querySelectorAll('.diff-nota').forEach(function (n) { n.textContent = ''; n.className = 'diff-nota'; });
     vistaAjustadaWrap.innerHTML = '';
     vistaAjustadaWrap.appendChild(tabla);
   }
@@ -1780,7 +1773,7 @@ if (callback) callback(true, mensaje);
     actualizarBotonListaCarga_();
     pintarEstadoBloqueo_();
 
-    if (esHoy && !header.querySelector('.btn-deshacer-envio')) {
+    if (false && esHoy && !header.querySelector('.btn-deshacer-envio')) { // papelera "Deshacer envío" quitada
       const wrapBtn = document.createElement('div');
       wrapBtn.innerHTML = htmlBotonDeshacerEnvio_();
       const nuevoBtn = wrapBtn.firstElementChild;
