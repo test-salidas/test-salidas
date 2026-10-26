@@ -68,6 +68,65 @@ setInterval(function () {
   });
 }, 20000);
 
+/* ---------------- SOBRE (envíos) + CANDADO (carga ajustada) ---------------- */
+
+const SVG_SOBRE_ = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
+const SVG_CANDADO_CARGA_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const SVG_MENU_PREVISION_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>';
+const SVG_MENU_DEFINITIVO_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>';
+const SVG_MENU_INFORMATICA_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+const SVG_MENU_CAMION_ = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h15v13H3z"/><path d="M18 8h3l3 3v5h-6"/><circle cx="7.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/></svg>';
+const SVG_OJO_ = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+// Pestaña elegida en cada agrupación con carga ajustada ("fecha|agrupación"
+// -> true si se está viendo el conteo REAL). Vive aquí fuera para que el
+// autorefresco, que rehace los paneles, no devuelva a nadie a la otra
+// pestaña mientras mira una. Por defecto se ve la carga ajustada.
+const VISTA_CONTEO_REAL_ = {};
+
+// Menú del sobre abierto ahora mismo (solo uno a la vez). Mientras está
+// abierto se saca a <body> con posición fija, para que no lo recorte el
+// borde del panel (que tiene overflow:hidden); al cerrarlo vuelve a su
+// sitio en la cabecera, así el resto del código lo sigue encontrando ahí.
+let MENU_ENVIOS_ABIERTO_ = null; // { btn, menu, wrap }
+function cerrarMenuEnvios_() {
+  const m = MENU_ENVIOS_ABIERTO_;
+  if (!m) return;
+  MENU_ENVIOS_ABIERTO_ = null;
+  m.menu.hidden = true;
+  m.menu.classList.remove('abierto');
+  m.menu.style.top = m.menu.style.left = '';
+  m.btn.classList.remove('activo');
+  m.btn.setAttribute('aria-expanded', 'false');
+  if (m.wrap.isConnected) m.wrap.appendChild(m.menu);
+  else m.menu.remove();
+}
+function abrirMenuEnvios_(btn, menu, wrap) {
+  cerrarMenuEnvios_();
+  document.body.appendChild(menu);
+  menu.hidden = false;
+  menu.classList.add('abierto');
+  btn.classList.add('activo');
+  btn.setAttribute('aria-expanded', 'true');
+  const r = btn.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+  const top = (r.bottom + 6 + h > window.innerHeight && r.top - 6 - h > 0) ? r.top - 6 - h : r.bottom + 6;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  MENU_ENVIOS_ABIERTO_ = { btn: btn, menu: menu, wrap: wrap };
+}
+document.addEventListener('click', function (e) {
+  const m = MENU_ENVIOS_ABIERTO_;
+  if (m && !m.menu.contains(e.target) && !m.btn.contains(e.target)) cerrarMenuEnvios_();
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarMenuEnvios_(); });
+window.addEventListener('resize', cerrarMenuEnvios_);
+window.addEventListener('scroll', function (e) {
+  const m = MENU_ENVIOS_ABIERTO_;
+  if (m && !(e.target && e.target.nodeType === 1 && m.menu.contains(e.target))) cerrarMenuEnvios_();
+}, true);
+
 function htmlBotonDeshacerEnvio_() {
   return '<button type="button" class="btn-deshacer-envio" title="Deshacer envío (solo se puede el mismo día)">' +
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -100,6 +159,32 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       escapeHtml(partes.ubicacion) + '</span>'
     : '';
 
+  // Botones de envío: ya no van sueltos en la cabecera, sino dentro del
+  // menú del sobre (al lado del camioncito). Son los MISMOS botones de
+  // siempre (misma clase, mismos permisos, mismo flujo), solo cambia dónde
+  // se ven.
+  const htmlBotonesEnvio_ =
+    (editable && seccion.estado !== 'enviado' && !seccion.previsionEnviada
+      ? '<button type="button" class="btn-header-prevision" title="Enviar previsión por email (no bloquea el conteo, se puede volver a enviar)">' + SVG_MENU_PREVISION_ + '<span>Enviar previsión</span></button>'
+      : '') +
+    (editable && seccion.estado !== 'enviado'
+      ? '<button type="button" class="btn-header-definitivo" title="Enviar definitivo por email (bloquea el conteo, lo archiva y vacía las casillas)">' + SVG_MENU_DEFINITIVO_ + '<span>Enviar definitivo</span></button>'
+      : '') +
+    // "Enviar a informática" es un aviso interno: sigue disponible aunque
+    // ya se haya enviado el Definitivo (solo depende de la fecha, que el
+    // backend manda en seccion.puedeInformatica).
+    ((seccion.puedeInformatica !== undefined ? seccion.puedeInformatica : seccion.editable) !== false
+      ? '<button type="button" class="btn-header-informatica" title="Enviar la previsión de carga solo a transporte@primor.eu (no bloquea el conteo, se puede volver a enviar)">' + SVG_MENU_INFORMATICA_ + '<span>Enviar a informática</span></button>'
+      : '');
+  const htmlMenuEnvios_ = htmlBotonesEnvio_
+    ? '<span class="envios-wrap">' +
+        '<button type="button" class="btn-menu-envios" title="Enviar por email" aria-label="Enviar por email" aria-haspopup="true" aria-expanded="false">' + SVG_SOBRE_ + '</button>' +
+        '<div class="menu-envios" role="menu" hidden>' + htmlBotonesEnvio_ +
+          '<div class="menu-envios-aviso" hidden>Pulsa antes «Guardar conteo»</div>' +
+        '</div>' +
+      '</span>'
+    : '';
+
   const header = document.createElement('div');
   header.className = 'seccion-header';
   header.innerHTML =
@@ -115,6 +200,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     (seccion.tieneCasillaDomingo ? '<span class="badge-total-domingo" title="Palets de DOMINGO: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Domingo:&nbsp;<span class="total-domingo-valor">0</span></span>' : '') +
     '<span class="badge-total-palets"><span class="total-palets-valor">0</span>&nbsp;palets</span>' +
     htmlBotonListaCarga_(seccion) +
+    htmlMenuEnvios_ +
+    '<button type="button" class="btn-candado-carga" hidden aria-label="Conteo bloqueado">' + SVG_CANDADO_CARGA_ + '</button>' +
     '<button type="button" class="btn-toggle-colapsar" title="Contraer / expandir">' +
     '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
     '</div>' +
@@ -124,19 +211,14 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     (seccion.estado === 'enviado' && esHoy ? htmlBotonDeshacerEnvio_() : '') +
     (!editable && seccion.estado !== 'enviado' ? '<span class="badge badge-solo-lectura">Solo lectura</span>' : '') +
     '</div>' +
+    // Donde antes estaban los botones de envío: las pestañas "Carga
+    // ajustada" / "Ver conteo real sin ajustar" (solo salen si hay una
+    // carga ajustada; ver pintarEstadoBloqueo_).
     '<div class="seccion-header-acciones">' +
-    (editable && seccion.estado !== 'enviado' && !seccion.previsionEnviada
-      ? '<button type="button" class="btn-header-prevision" title="Enviar previsión por email (no bloquea el conteo, se puede volver a enviar)">Enviar Previsión</button>'
-      : '') +
-    (editable && seccion.estado !== 'enviado'
-      ? '<button type="button" class="btn-header-definitivo" title="Enviar definitivo por email (bloquea el conteo, lo archiva y vacía las casillas)">Enviar Definitivo</button>'
-      : '') +
-    // "Enviar a informática" es un aviso interno: sigue disponible aunque
-    // ya se haya enviado el Definitivo (solo depende de la fecha, que el
-    // backend manda en seccion.puedeInformatica).
-    ((seccion.puedeInformatica !== undefined ? seccion.puedeInformatica : seccion.editable) !== false
-      ? '<button type="button" class="btn-header-informatica" title="Enviar la previsión de carga solo a transporte@primor.eu (no bloquea el conteo, se puede volver a enviar)">Enviar a informática</button>'
-      : '') +
+    '<div class="vista-carga-tabs" role="tablist" hidden>' +
+      '<button type="button" class="vista-carga-tab" data-vista="ajustada" role="tab">' + SVG_MENU_CAMION_ + '<span>Carga ajustada</span><span class="vista-carga-num"></span></button>' +
+      '<button type="button" class="vista-carga-tab" data-vista="real" role="tab">' + SVG_OJO_ + '<span>Ver conteo real sin ajustar</span><span class="vista-carga-num"></span></button>' +
+    '</div>' +
     '</div>' +
     '<div class="seccion-header-extra">' +
     // VERIFICAR CONTEO: administradores (eligen la nave en un modal) y
@@ -230,6 +312,36 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     bindBotonListaCarga_();
   }
   bindBotonListaCarga_();
+
+  // Sobre: abre/cierra el menú con los tres envíos. Al pulsar una opción
+  // el menú se cierra ANTES (fase de captura) de que el botón haga lo suyo,
+  // así vuelve a su sitio en la cabecera.
+  const btnMenuEnvios = header.querySelector('.btn-menu-envios');
+  const menuEnvios = header.querySelector('.menu-envios');
+  const enviosWrap = header.querySelector('.envios-wrap');
+  if (btnMenuEnvios && menuEnvios) {
+    btnMenuEnvios.onclick = function (e) {
+      e.stopPropagation();
+      if (MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menuEnvios) cerrarMenuEnvios_();
+      else abrirMenuEnvios_(btnMenuEnvios, menuEnvios, enviosWrap);
+    };
+    menuEnvios.addEventListener('click', function (e) {
+      if (e.target.closest('button')) cerrarMenuEnvios_();
+    }, true);
+  }
+  // Candado (bloqueo por carga ajustada).
+  const btnCandado = header.querySelector('.btn-candado-carga');
+  if (btnCandado) btnCandado.onclick = function (e) { e.stopPropagation(); pulsarCandado_(); };
+  // Pestañas "Carga ajustada" / "Ver conteo real sin ajustar".
+  header.querySelectorAll('.vista-carga-tab').forEach(function (t) {
+    t.onclick = function (e) {
+      e.stopPropagation();
+      const clave = fecha + '|' + seccion.nombre;
+      if (t.getAttribute('data-vista') === 'real') VISTA_CONTEO_REAL_[clave] = true;
+      else delete VISTA_CONTEO_REAL_[clave];
+      pintarEstadoBloqueo_();
+    };
+  });
 
   /* ---------------- CARGA DEL CAMIÓN ----------------
    * seccion.carga = { origen: 'ajuste'|'prevision'|'definitivo', hora, por,
@@ -335,6 +447,223 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     } else if (!revisar && badge) {
       badge.remove();
     }
+    pintarEstadoBloqueo_();
+  }
+
+  /* ---------------- CARGA AJUSTADA = CONTEO BLOQUEADO ----------------
+   * En cuanto hay una carga ajustada (alguna tienda con cargar ≠ contados,
+   * o repartida entre camiones), el conteo queda bloqueado para todos los
+   * que no son administradores, y la app enseña por defecto la carga
+   * ajustada (con la pestaña "Ver conteo real sin ajustar" para ver lo
+   * contado). Solo un administrador puede desbloquearlo con el candado:
+   * al desbloquear se borra el ajuste (la carga vuelve a ser lo contado).
+   * No hace falta guardar nada nuevo en la base de datos: "bloqueado" es
+   * simplemente "hay carga ajustada", así que todos los ordenadores lo ven
+   * igual con el autorefresco. */
+  function hayCargaAjustada_() {
+    return cargaEditable_() && Object.keys(ajustesGuardados_()).length > 0;
+  }
+  function bloqueadoParaMi_() {
+    return editable && !esAdmin() && hayCargaAjustada_();
+  }
+  function quienAjusto_() {
+    const c = seccion.carga || {};
+    return [c.por, c.hora].filter(Boolean).join(' · ');
+  }
+  function totalCargaAjustada_() {
+    return listaCargaEfectiva_().reduce(function (s, t) { return s + (t.cerrada ? 0 : (Number(t.cargar) || 0)); }, 0);
+  }
+  function totalContadoAhora_() {
+    return filasCargaActuales_().reduce(function (s, f) { return s + (f.cerrada ? 0 : (Number(f.contados) || 0)); }, 0);
+  }
+  let bloqueoPintado_ = null; // último estado de bloqueo aplicado (null = todavía ninguno)
+  function pintarEstadoBloqueo_() {
+    const hay = hayCargaAjustada_();
+    const bloqueado = bloqueadoParaMi_();
+    const verReal = !hay || !!VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+
+    // Casillas de la tabla real: se apagan solo las que estaban
+    // encendidas (y se marcan), para no encender al desbloquear las que
+    // estuvieran apagadas por otro motivo (otra nave, doble salida…).
+    if (bloqueado) {
+      tableWrap.querySelectorAll('input.celda, .btn-cerrar-tienda, .btn-reabrir').forEach(function (el) {
+        if (!el.disabled) { el.disabled = true; el.classList.add('bloq-carga'); }
+      });
+    } else {
+      tableWrap.querySelectorAll('.bloq-carga').forEach(function (el) { el.disabled = false; el.classList.remove('bloq-carga'); });
+    }
+    panel.classList.toggle('carga-bloqueada', bloqueado);
+
+    // Candado de la cabecera (solo si la agrupación aún se puede tocar).
+    const candado = header.querySelector('.btn-candado-carga');
+    if (candado) {
+      candado.hidden = !(hay && editable);
+      const quien = quienAjusto_();
+      candado.title = esAdmin()
+        ? 'Conteo bloqueado por la carga ajustada' + (quien ? ' (' + quien + ')' : '') + '. Pulsa para desbloquearlo.'
+        : 'Conteo bloqueado: la carga la ha ajustado un responsable' + (quien ? ' (' + quien + ')' : '') + '.';
+    }
+
+    // Aviso encima de la tabla.
+    if (hay && editable) {
+      const quien = quienAjusto_();
+      avisoBloqueo.hidden = false;
+      avisoBloqueo.innerHTML = SVG_CANDADO_CARGA_ + '<span>' + (esAdmin()
+        ? 'Carga ajustada' + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. El conteo está bloqueado para los operarios. Pulsa el candado para desbloquearlo.'
+        : 'Conteo bloqueado: un responsable ha ajustado la carga' + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. Si hay que cambiar algo, pide a un administrador que lo desbloquee.') + '</span>';
+    } else {
+      avisoBloqueo.hidden = true;
+      avisoBloqueo.innerHTML = '';
+    }
+
+    // Pestañas "Carga ajustada" / "Ver conteo real sin ajustar".
+    const tabs = header.querySelector('.vista-carga-tabs');
+    if (tabs) {
+      tabs.hidden = !hay;
+      tabs.querySelectorAll('.vista-carga-tab').forEach(function (t) {
+        const activa = (t.getAttribute('data-vista') === 'real') === verReal;
+        t.classList.toggle('activa', activa);
+        t.setAttribute('aria-selected', activa ? 'true' : 'false');
+      });
+      if (hay) {
+        tabs.querySelector('[data-vista="ajustada"] .vista-carga-num').textContent = totalCargaAjustada_();
+        tabs.querySelector('[data-vista="real"] .vista-carga-num').textContent = totalContadoAhora_();
+      }
+    }
+
+    // Qué tabla se ve, y el total de palets de la cabecera.
+    tableWrap.hidden = !verReal;
+    vistaAjustadaWrap.hidden = verReal;
+    const badgePalets = header.querySelector('.badge-total-palets');
+    if (verReal) {
+      vistaAjustadaWrap.innerHTML = '';
+      if (badgePalets) { badgePalets.classList.remove('es-ajustada'); badgePalets.removeAttribute('title'); }
+      actualizarTotalPalets();
+    } else {
+      pintarVistaAjustada_();
+      const el = header.querySelector('.total-palets-valor');
+      if (el) el.textContent = totalCargaAjustada_();
+      if (badgePalets) { badgePalets.classList.add('es-ajustada'); badgePalets.title = 'Palets de la carga ajustada (contados: ' + totalContadoAhora_() + ')'; }
+    }
+
+    // Si el bloqueo ha cambiado, el botón VERIFICAR CONTEO también.
+    if (bloqueoPintado_ !== null && bloqueoPintado_ !== bloqueado) pintarVerificaciones_();
+    bloqueoPintado_ = bloqueado;
+  }
+
+  // Copia de solo lectura de la tabla real con los números de la carga
+  // ajustada. Lo que se quita en cada tienda se reparte en el orden de
+  // siempre: primero PTA, luego CART. y por último 60. Las casillas que
+  // cambian salen en azul (con lo contado al pasar el ratón).
+  function pintarVistaAjustada_() {
+    const ajustes = ajustesGuardados_();
+    const original = tableWrap.querySelector('table.conteo');
+    if (!original) return;
+    const tabla = original.cloneNode(true);
+    tabla.classList.add('conteo-ajustado');
+    // cloneNode no siempre copia lo escrito/calculado en las casillas
+    // (solo lo que venía en el HTML): se copia a mano, casilla a casilla.
+    const inputsOriginal = original.querySelectorAll('input');
+    tabla.querySelectorAll('input').forEach(function (inp, i) { if (inputsOriginal[i]) inp.value = inputsOriginal[i].value; });
+    tabla.querySelectorAll('input, button').forEach(function (el) { el.disabled = true; el.tabIndex = -1; });
+    tabla.querySelectorAll('tbody tr').forEach(function (tr) {
+      const nombre = tr.getAttribute('data-nombre');
+      if (!nombre || tr.classList.contains('fila-cerrada') || !Object.prototype.hasOwnProperty.call(ajustes, nombre)) return;
+      const totalIn = tr.querySelector('input[data-campo="total"]');
+      if (!totalIn) return;
+      const contados = parseFloat(totalIn.value) || 0;
+      const cargar = Number(ajustes[nombre]) || 0;
+      let quitar = contados - cargar;
+      ['pta', 'cart', 'c60'].forEach(function (campo) {
+        if (quitar <= 0) return;
+        const inp = tr.querySelector('input[data-campo="' + campo + '"]');
+        if (!inp || inp.classList.contains('celda-no') || inp.classList.contains('celda-otra-agencia')) return;
+        const v = parseFloat(inp.value) || 0;
+        const q = Math.min(v, quitar);
+        if (q <= 0) return;
+        inp.value = v - q;
+        inp.classList.add('celda-ajustada');
+        inp.title = 'Contado: ' + v + ' · se quita' + (q === 1 ? ' 1 palet' : 'n ' + q + ' palets');
+        quitar -= q;
+      });
+      totalIn.value = cargar;
+      const vis = tr.querySelector('input[data-campo="totalVisual"]');
+      let totalVisto = cargar;
+      if (vis) {
+        const antes = vis.value === '' ? contados : (parseFloat(vis.value) || 0);
+        totalVisto = antes - (contados - cargar);
+        vis.value = totalVisto;
+        vis.classList.add('celda-ajustada');
+        vis.title = 'Contado: ' + antes + ' · carga ajustada: ' + totalVisto;
+      }
+      // PESO automático: con los palets que de verdad se cargan.
+      const pesoIn = tr.querySelector('input[data-campo="peso"]');
+      if (pesoIn && !pesoIn.classList.contains('celda-otra-agencia') && typeof PESO_PALET_KG !== 'undefined') {
+        const n = function (c) { const i = tr.querySelector('input[data-campo="' + c + '"]'); return i ? (parseFloat(i.value) || 0) : 0; };
+        const kg = n('c60') * PESO_PALET_KG.c60 + n('pta') * PESO_PALET_KG.pta + n('cart') * PESO_PALET_KG.cart;
+        pesoIn.value = kg || '';
+      }
+      // Aviso de límite de la fila, recalculado con la carga ajustada.
+      tr.classList.remove('fila-aviso', 'fila-alerta');
+      tr.classList.add('fila-ajustada');
+      const nota = tr.querySelector('.diff-nota');
+      if (nota) {
+        nota.className = 'diff-nota';
+        const limite = Number(tr.getAttribute('data-limite'));
+        const exceso = limite ? totalVisto - limite : 0;
+        if (exceso >= 3) { tr.classList.add('fila-alerta'); nota.classList.add('alerta'); nota.textContent = '+' + exceso + ' sobre el límite — consultar a informática'; }
+        else if (exceso >= 1) { tr.classList.add('fila-aviso'); nota.classList.add('aviso'); nota.textContent = '+' + exceso + ' sobre el límite — ceñirse al límite'; }
+        else { nota.classList.add('ajuste'); nota.textContent = 'Contado ' + contados + ' → carga ' + cargar; }
+      }
+    });
+    vistaAjustadaWrap.innerHTML = '';
+    vistaAjustadaWrap.appendChild(tabla);
+  }
+
+  // Candado: el administrador desbloquea (con confirmación); el resto solo
+  // ve quién lo bloqueó.
+  function pulsarCandado_() {
+    if (!hayCargaAjustada_()) return;
+    const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
+    const quien = quienAjusto_();
+    if (!esAdmin()) {
+      appConfirm('Conteo bloqueado',
+        'La carga de ' + titulo + ' la ha ajustado un responsable' + (quien ? ' (' + quien + ')' : '') +
+        ', así que el conteo está bloqueado. Si hay que cambiar algo, pide a un administrador que lo desbloquee.', function () {});
+      const btnOk = document.getElementById('modal-confirm-btn');
+      if (btnOk) btnOk.textContent = 'Entendido';
+      const btnNo = document.getElementById('modal-cancel-btn');
+      if (btnNo) btnNo.style.display = 'none';
+      return;
+    }
+    const cams = camionesCarga_() || [];
+    const hayDivididas = cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; });
+    appConfirm('Desbloquear carga',
+      '¿Seguro que quieres desbloquear la carga de ' + titulo + '? ' +
+      'Se borrará la carga ajustada (' + totalCargaAjustada_() + ' palets)' + (quien ? ', hecha por ' + quien + ',' : '') +
+      ' y la app volverá a mostrar el conteo real (' + totalContadoAhora_() + ' palets). ' +
+      (hayDivididas ? 'También se quitará el reparto de tiendas entre camiones. ' : (cams.length ? 'Los camiones y matrículas se conservan. ' : '')) +
+      'Los operarios podrán volver a modificar el conteo. Si después hace falta, habrá que ajustar la carga otra vez.',
+      desbloquearCarga_, true);
+    const btnOk = document.getElementById('modal-confirm-btn');
+    if (btnOk) btnOk.textContent = 'Desbloquear';
+  }
+  // Desbloquear = guardar la carga igual a lo contado ahora en todas las
+  // tiendas (sin ajustes ni tiendas divididas): deja de haber carga
+  // ajustada y con ello el bloqueo, en todos los ordenadores.
+  function desbloquearCarga_() {
+    const cargas = {};
+    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) cargas[f.nombre] = f.contados; });
+    let cams = camionesCarga_() || [];
+    const hayDivididas = cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; });
+    cams = hayDivididas ? [] : cams.map(function (c) {
+      return { matricula: c.matricula || '', remolque: c.remolque || '', tiendas: Array.isArray(c.tiendas) ? c.tiendas : [], parciales: {} };
+    });
+    guardarCarga_(cargas, cams, function (ok) {
+      if (!ok) return;
+      cerrarModal();
+      mostrarToast('Carga desbloqueada: ya se ve el conteo real');
+    });
   }
   function infoCargaParaModal_() {
     const c = seccion.carga;
@@ -422,6 +751,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       llamarApi_('guardarCargaAjustada', [dia, seccion.nombre, fecha, cargas, camiones || []])
         .then(function (carga) {
           seccion.carga = carga || null;
+          // Carga recién guardada: se vuelve a ver la carga ajustada (si la hay).
+          delete VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
           actualizarEstadoCarga_();
           done(true);
         })
@@ -529,6 +860,18 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       });
     });
   }
+  // Aviso "conteo bloqueado" y tabla de la CARGA AJUSTADA (solo lectura,
+  // copia de la tabla real con los números de la carga). La tabla real
+  // (tableWrap) sigue siempre en el DOM aunque esté oculta: es la que se
+  // guarda, la que leen los envíos, el PDF y el Excel.
+  const avisoBloqueo = document.createElement('div');
+  avisoBloqueo.className = 'aviso-carga-bloqueada';
+  avisoBloqueo.hidden = true;
+  const vistaAjustadaWrap = document.createElement('div');
+  vistaAjustadaWrap.className = 'table-wrap tabla-ajustada-wrap';
+  vistaAjustadaWrap.hidden = true;
+  tablaCol.appendChild(avisoBloqueo);
+  tablaCol.appendChild(vistaAjustadaWrap);
   tablaCol.appendChild(tableWrap);
   body.appendChild(tablaCol);
 
@@ -603,6 +946,19 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       btn.disabled = bloquear;
       btn.title = bloquear ? 'Pulsa antes "Guardar conteo"' : btn.getAttribute('data-title-original');
     });
+    actualizarMenuEnvios_();
+  }
+  // Menú del sobre: aviso "Pulsa antes Guardar conteo" si hay alguna
+  // opción apagada, y el sobre desaparece si ya no queda ninguna opción.
+  function actualizarMenuEnvios_() {
+    const menu = header.querySelector('.menu-envios') || (MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.wrap.closest('.seccion-header') === header ? MENU_ENVIOS_ABIERTO_.menu : null);
+    const wrap = header.querySelector('.envios-wrap');
+    if (!menu || !wrap) return;
+    const botones = menu.querySelectorAll('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
+    const aviso = menu.querySelector('.menu-envios-aviso');
+    if (aviso) aviso.hidden = !Array.prototype.some.call(botones, function (b) { return b.disabled; });
+    wrap.hidden = botones.length === 0;
+    if (!botones.length && MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menu) cerrarMenuEnvios_();
   }
   function marcarCambiosSinGuardar_() {
     hayCambiosSinGuardar = true;
@@ -860,6 +1216,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const campo = campoNaveSesion_();
     const n = naveDeCampo_(campo);
     const ver = v[campo];
+    // Conteo bloqueado por la carga ajustada: no se puede verificar (eso
+    // pone casillas a 0 y guarda). Lo ya verificado se sigue viendo.
+    if (!ver && bloqueadoParaMi_()) {
+      wrap.innerHTML = '<span class="btn-header-verificar bloqueado-carga" title="Conteo bloqueado: la carga está ajustada">' + SVG_CANDADO_CARGA_ + 'Verificar conteo</span>';
+      return;
+    }
     if (ver) {
       wrap.innerHTML =
         '<span class="verif-hecha">' +
@@ -881,7 +1243,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   /** Pone a 0 las tiendas vacías de esa columna, guarda y deja constancia
    *  de la verificación en el servidor. */
   function ejecutarVerificacion_(campo) {
-    if (!editable) return;
+    if (!editable || bloqueadoParaMi_()) return;
     const n = naveDeCampo_(campo);
     const btn = header.querySelector('.btn-header-verificar');
     if (btn) btn.disabled = true;
@@ -1336,13 +1698,14 @@ if (callback) callback(true, mensaje);
       wrapTmp.innerHTML = badgePrevision(seccion);
       const nuevoBadge = wrapTmp.firstElementChild;
       if (nuevoBadge) {
-        const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
-        if (anclaBoton) anclaBoton.insertAdjacentElement('beforebegin', nuevoBadge);
+        const badges = header.querySelector('.seccion-header-badges');
+        if (badges) badges.insertBefore(nuevoBadge, badges.firstChild);
         else header.appendChild(nuevoBadge);
       }
 
       const btnPrevisionEl = header.querySelector('.btn-header-prevision');
       if (btnPrevisionEl) btnPrevisionEl.remove();
+      actualizarMenuEnvios_();
       actualizarMenuRapidoItem_(seccion);
       cargaTrasEnvio_('prevision', resultado);
       actualizarEstadoCarga_();
@@ -1385,13 +1748,16 @@ if (callback) callback(true, mensaje);
     const badgeRevisar = header.querySelector('.badge-carga-revisar');
     if (badgeRevisar) badgeRevisar.remove();
     actualizarBotonListaCarga_();
+    pintarEstadoBloqueo_();
 
     if (esHoy && !header.querySelector('.btn-deshacer-envio')) {
       const wrapBtn = document.createElement('div');
       wrapBtn.innerHTML = htmlBotonDeshacerEnvio_();
       const nuevoBtn = wrapBtn.firstElementChild;
-      const anclaBoton = header.querySelector('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
-      if (anclaBoton) anclaBoton.insertAdjacentElement('beforebegin', nuevoBtn);
+      const badges = header.querySelector('.seccion-header-badges');
+      const badgePrev = badges && badges.querySelector('.badge-prevision');
+      if (badgePrev) badgePrev.insertAdjacentElement('afterend', nuevoBtn);
+      else if (badges) badges.insertBefore(nuevoBtn, badges.firstChild);
       else header.appendChild(nuevoBtn);
       bindBotonDeshacerEnvio_(nuevoBtn);
     }
@@ -1410,6 +1776,11 @@ if (callback) callback(true, mensaje);
   //    foco está dentro de este panel, se considera que el usuario está
   //    trabajando aquí y el refresco automático no debe tocarlo todavía
   //    (se reintentará en el siguiente sondeo).
+  // La columna TOTAL de la tabla real se calcula al enlazar cada fila (más
+  // arriba), después del primer pintado: se repinta la vista ajustada ya
+  // con todos los totales.
+  if (seccion.carga !== undefined) pintarEstadoBloqueo_();
+
   panel._firma = JSON.stringify([seccion, dia, esHoy]);
   panel._enUso = function () {
     // OJO: document.activeElement es por documento, no por ventana. Si el
@@ -1422,6 +1793,7 @@ if (callback) callback(true, mensaje);
     // eso el "cursor puesto en un campo" solo cuenta como "en uso" si la
     // ventana realmente tiene el foco en este instante; los cambios sin
     // guardar o un guardado en curso sí protegen siempre, foco o no.
+    if (MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menuEnvios) return true;
     return hayCambiosSinGuardar || (btnGuardarConteo && btnGuardarConteo.disabled) || (document.hasFocus() && panel.contains(document.activeElement));
   };
 
