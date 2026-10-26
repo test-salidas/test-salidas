@@ -1982,6 +1982,20 @@
   /* Segunda línea de la cabecera: fuera si no tiene nada (sin hueco en blanco). */
   .seccion-header-meta[hidden] { display: none; }
   .seccion-header-top .verif-wrap { display: inline-flex; flex-shrink: 0; }
+  /* VERIFICAR CONTEO como icono de check (mismo tamaño que camión / sobre). */
+  .seccion-header-top .btn-header-verificar.btn-verif-icono {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 0;
+    width: 40px; height: 28px; padding: 0; border-radius: 14px; cursor: pointer;
+    border: 1.5px solid #9fd2bd; background: #fff; color: var(--ok); opacity: 1;
+    text-transform: none; letter-spacing: 0; font-size: 0;
+  }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono svg { width: 19px; height: 19px; stroke-width: 3; }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono:hover { background: #e4f3ec; }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono.ok { background: var(--ok); border-color: var(--ok); color: #fff; cursor: default; }
+  .seccion-header-top button.btn-header-verificar.btn-verif-icono.ok { cursor: pointer; }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono.aviso { background: #fdf1de; border-color: #f0c98a; color: var(--amber-dark); }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono.bloqueado { background: #f6f7f9; border-color: #d3d7de; color: #b3b8c2; cursor: not-allowed; }
+  .seccion-header-top .btn-header-verificar.btn-verif-icono:disabled { opacity: .6; cursor: wait; }
 
   /* CANDADO: conteo bloqueado porque la carga está ajustada. Rojo; el
      administrador lo pulsa para desbloquear, el resto ve quién lo bloqueó. */
