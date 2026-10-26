@@ -337,8 +337,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     t.onclick = function (e) {
       e.stopPropagation();
       const clave = fecha + '|' + seccion.nombre;
-      if (t.getAttribute('data-vista') === 'real') VISTA_CONTEO_REAL_[clave] = true;
-      else delete VISTA_CONTEO_REAL_[clave];
+      VISTA_CONTEO_REAL_[clave] = t.getAttribute('data-vista') === 'real';
       pintarEstadoBloqueo_();
     };
   });
@@ -460,8 +459,19 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
    * No hace falta guardar nada nuevo en la base de datos: "bloqueado" es
    * simplemente "hay carga ajustada", así que todos los ordenadores lo ven
    * igual con el autorefresco. */
+  // Bloqueado = hay carga guardada (ajustada a mano o de la previsión
+  // enviada) y un administrador no la ha desbloqueado después. El
+  // servidor lo dice en seccion.carga.desbloqueada (se vuelve a bloquear
+  // solo si se ajusta la carga o se envía la previsión otra vez).
   function hayCargaAjustada_() {
-    return cargaEditable_() && Object.keys(ajustesGuardados_()).length > 0;
+    return cargaEditable_() && !seccion.carga.desbloqueada;
+  }
+  // "un responsable ha ajustado la carga" / "se ha enviado la previsión".
+  function motivoBloqueo_() {
+    return (seccion.carga && seccion.carga.origen === 'prevision') ? 'se ha enviado la previsión' : 'un responsable ha ajustado la carga';
+  }
+  function tituloBloqueo_() {
+    return (seccion.carga && seccion.carga.origen === 'prevision') ? 'Previsión enviada' : 'Carga ajustada';
   }
   function bloqueadoParaMi_() {
     return editable && !esAdmin() && hayCargaAjustada_();
@@ -508,7 +518,10 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const hay = hayCargaAjustada_();             // carga ajustada que aún se puede tocar -> candado
     const hayVista = Object.keys(ajustesParaVista_()).length > 0; // lo cargado ≠ lo contado -> pestañas
     const bloqueado = bloqueadoParaMi_();
-    const verReal = !hayVista || !!VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+    // Pestaña: la que haya elegido el usuario; si no ha elegido, la carga
+    // (o el conteo real si un administrador lo ha desbloqueado).
+    const eleccion = VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+    const verReal = !hayVista || (eleccion !== undefined ? eleccion : !!(seccion.carga && seccion.carga.desbloqueada));
 
     // Casillas de la tabla real: se apagan solo las que estaban
     // encendidas (y se marcan), para no encender al desbloquear las que
@@ -532,8 +545,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         ? 'Definitivo enviado. Pulsa para desbloquearlo (deshace el envío; solo el mismo día).'
         : 'Definitivo enviado: solo un administrador puede desbloquearlo.';
       else candado.title = esAdmin()
-        ? 'Conteo bloqueado por la carga ajustada' + (quien ? ' (' + quien + ')' : '') + '. Pulsa para desbloquearlo.'
-        : 'Conteo bloqueado: la carga la ha ajustado un responsable' + (quien ? ' (' + quien + ')' : '') + '.';
+        ? 'Conteo bloqueado: ' + motivoBloqueo_() + (quien ? ' (' + quien + ')' : '') + '. Pulsa para desbloquearlo.'
+        : 'Conteo bloqueado: ' + motivoBloqueo_() + (quien ? ' (' + quien + ')' : '') + '.';
     }
 
     // Aviso encima de la tabla.
@@ -541,8 +554,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       const quien = quienAjusto_();
       avisoBloqueo.hidden = false;
       avisoBloqueo.innerHTML = SVG_CANDADO_CARGA_ + '<span>' + (esAdmin()
-        ? 'Carga ajustada' + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. El conteo está bloqueado para los operarios. Pulsa el candado para desbloquearlo.'
-        : 'Conteo bloqueado: un responsable ha ajustado la carga' + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. Si hay que cambiar algo, pide a un administrador que lo desbloquee.') + '</span>';
+        ? tituloBloqueo_() + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. El conteo está bloqueado para los operarios. Pulsa el candado para desbloquearlo.'
+        : 'Conteo bloqueado: ' + motivoBloqueo_() + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. Si hay que cambiar algo, pide a un administrador que lo desbloquee.') + '</span>';
     } else {
       avisoBloqueo.hidden = true;
       avisoBloqueo.innerHTML = '';
@@ -667,36 +680,33 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       if (btnNo) btnNo.style.display = 'none';
       return;
     }
-    // "Deshacer envío" todavía no está pasado a Supabase (no hay acción
-    // deshacerEnvioSeccion en SUPABASE_ACCIONES_): se avisa claro en vez de
-    // dejar que falle. En cuanto exista, el candado funciona solo.
-    if (typeof SUPABASE_ACCIONES_ === 'undefined' || !SUPABASE_ACCIONES_.deshacerEnvioSeccion) {
-      appConfirm('Desbloquear definitivo',
-        'Todavía no se puede desbloquear un definitivo desde la app: falta preparar en la base de datos la función para deshacer el envío.', function () {});
-      const btnOk1 = document.getElementById('modal-confirm-btn');
-      if (btnOk1) btnOk1.textContent = 'Entendido';
-      const btnNo1 = document.getElementById('modal-cancel-btn');
-      if (btnNo1) btnNo1.style.display = 'none';
-      return;
-    }
     appConfirm('Desbloquear definitivo',
       '¿Seguro que quieres desbloquear ' + titulo + '? Se deshará el envío del definitivo: se quitará la marca de enviado y se recuperarán los datos para poder seguir editándolos. ' +
-      'El email que ya se mandó a la agencia no se puede recuperar. Si la carga estaba ajustada, seguirá ajustada (y bloqueada para los operarios) hasta que la desbloquees también. ' +
+      'El email que ya se mandó a la agencia no se puede recuperar. El conteo quedará desbloqueado para los operarios (si había carga ajustada, se borra). ' +
       'Solo se puede hacer el mismo día en que se envió.',
       function () {
         const candado = header.querySelector('.btn-candado-carga');
         if (candado) candado.disabled = true;
-        google.script.run
-          .withSuccessHandler(function () {
+        mostrarModalCargando('Desbloqueando el definitivo…');
+        llamarApi_('deshacerEnvioSeccion', [dia, seccion.nombre, fecha])
+          .then(function () {
+            // Sin el definitivo, quedaría bloqueado por la previsión o la
+            // carga ajustada: se desbloquea también.
+            return llamarApi_('desbloquearCarga', [dia, seccion.nombre, fecha]).catch(function () { return null; });
+          })
+          .then(function () {
             if (candado) candado.disabled = false;
+            delete VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+            cerrarModal();
+            mostrarToast('Definitivo desbloqueado');
             cargarConteoDia();
             cargarCalendario();
           })
-          .withFailureHandler(function (err) {
+          .catch(function (err) {
             if (candado) candado.disabled = false;
+            cerrarModal();
             mostrarErrorServidor(err);
-          })
-          .deshacerEnvioSeccion(dia, seccion.nombre, fecha);
+          });
       },
       true);
     const btnOk = document.getElementById('modal-confirm-btn');
@@ -709,7 +719,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const quien = quienAjusto_();
     if (!esAdmin()) {
       appConfirm('Conteo bloqueado',
-        'La carga de ' + titulo + ' la ha ajustado un responsable' + (quien ? ' (' + quien + ')' : '') +
+        'En ' + titulo + ' ' + motivoBloqueo_() + (quien ? ' (' + quien + ')' : '') +
         ', así que el conteo está bloqueado. Si hay que cambiar algo, pide a un administrador que lo desbloquee.', function () {});
       const btnOk = document.getElementById('modal-confirm-btn');
       if (btnOk) btnOk.textContent = 'Entendido';
@@ -717,47 +727,34 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       if (btnNo) btnNo.style.display = 'none';
       return;
     }
-    const cams = camionesCarga_() || [];
-    const seQuitanCamiones = cams.length > 0 && camionesTrasDesbloquear_() === null;
+    const esPrevision = seccion.carga && seccion.carga.origen === 'prevision';
     appConfirm('Desbloquear carga',
-      '¿Seguro que quieres desbloquear la carga de ' + titulo + '? ' +
-      'Se borrará la carga ajustada (' + totalCargaAjustada_() + ' palets)' + (quien ? ', hecha por ' + quien + ',' : '') +
-      ' y la app volverá a mostrar el conteo real (' + totalContadoAhora_() + ' palets). ' +
-      (seQuitanCamiones ? 'También se quitarán los camiones y matrículas (con lo contado no cuadran: tiendas divididas o más de 33 palets en un camión). ' : (cams.length ? 'Los camiones y matrículas se conservan. ' : '')) +
-      'Los operarios podrán volver a modificar el conteo. Si después hace falta, habrá que ajustar la carga otra vez.',
+      '¿Seguro que quieres desbloquear ' + titulo + '? ' +
+      (esPrevision
+        ? 'La previsión ya enviada' + (quien ? ' (' + quien + ')' : '') + ' no se deshace: el email ya salió. Si además había carga ajustada, se borra. '
+        : 'Se borrará la carga ajustada' + (quien ? ' (' + quien + ')' : '') + ', con sus camiones y matrículas, y la app volverá a mostrar el conteo real (' + totalContadoAhora_() + ' palets). ') +
+      'Los operarios podrán volver a modificar el conteo. Si después se vuelve a ajustar la carga o a enviar la previsión, se bloqueará otra vez.',
       desbloquearCarga_, true);
     const btnOk = document.getElementById('modal-confirm-btn');
     if (btnOk) btnOk.textContent = 'Desbloquear';
   }
-  // Desbloquear = guardar la carga igual a lo contado ahora en todas las
-  // tiendas (sin ajustes ni tiendas divididas): deja de haber carga
-  // ajustada y con ello el bloqueo, en todos los ordenadores.
-  // Camiones que se conservan al desbloquear: los mismos, sin repartos. Si
-  // había tiendas divididas, o con lo contado algún camión pasaría de 33
-  // palets (la base de datos no lo deja guardar), se quitan los camiones.
-  function camionesTrasDesbloquear_() {
-    const cams = camionesCarga_() || [];
-    if (!cams.length) return [];
-    if (cams.some(function (c) { return c && c.parciales && Object.keys(c.parciales).length; })) return null;
-    const contados = {};
-    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) contados[f.nombre] = Number(f.contados) || 0; });
-    const pasado = cams.some(function (c) {
-      return (Array.isArray(c.tiendas) ? c.tiendas : []).reduce(function (s, t) { return s + (contados[t] || 0); }, 0) > 33;
-    });
-    if (pasado) return null;
-    return cams.map(function (c) {
-      return { matricula: c.matricula || '', remolque: c.remolque || '', tiendas: Array.isArray(c.tiendas) ? c.tiendas : [], parciales: {} };
-    });
-  }
+  // Desbloquear (solo administradores, el servidor lo comprueba): borra la
+  // carga ajustada si la hay y apunta el desbloqueo. Todos los ordenadores
+  // lo ven con el autorefresco (seccion.carga.desbloqueada).
   function desbloquearCarga_() {
-    const cargas = {};
-    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) cargas[f.nombre] = f.contados; });
-    const cams = camionesTrasDesbloquear_() || [];
-    guardarCarga_(cargas, cams, function (ok) {
-      if (!ok) return;
-      cerrarModal();
-      mostrarToast('Carga desbloqueada: ya se ve el conteo real');
-    });
+    mostrarModalCargando('Desbloqueando el conteo…');
+    llamarApi_('desbloquearCarga', [dia, seccion.nombre, fecha])
+      .then(function (carga) {
+        seccion.carga = carga || null;
+        delete VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+        actualizarEstadoCarga_();
+        cerrarModal();
+        mostrarToast('Conteo desbloqueado: ya se ve el conteo real');
+      })
+      .catch(function (err) {
+        cerrarModal();
+        mostrarErrorServidor(err);
+      });
   }
   function infoCargaParaModal_() {
     const c = seccion.carga;

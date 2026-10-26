@@ -102,6 +102,13 @@ const SUPABASE_ACCIONES_ = {
     const dia = args[0], nombreAgrupacion = args[1], fecha = args[2];
     return llamarRpcSupabase_('deshacer_envio_seccion', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha });
   },
+  // Candado de la cabecera (solo administradores): desbloquea el conteo
+  // bloqueado por la carga ajustada o la previsión enviada. Borra la carga
+  // ajustada si la hay y devuelve la carga vigente (con desbloqueada: true).
+  desbloquearCarga: function (args) {
+    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2];
+    return llamarRpcSupabase_('desbloquear_carga', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha });
+  },
   // Lista de carga (camioncito junto a los palets): la que se guardó con el
   // último envío de esa ruta y fecha (el Definitivo si lo hay; si no, la
   // última Previsión).
