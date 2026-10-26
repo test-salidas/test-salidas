@@ -14,6 +14,11 @@
   const btnYaInstalada   = document.getElementById('btnYaInstalada');
   const textoAyuda       = document.getElementById('instalarAppAyuda');
 
+  // SOLO EN TEST-SALIDAS: no se exige instalar la app (se puede probar
+  // desde el navegador). En producción NO subir este cambio.
+  if (overlay) overlay.remove();
+  return;
+
   if (!overlay || !btnInstalar || !btnYaInstalada) return;
 
   // Chrome/Edge (escritorio o Android) disparan este evento cuando la app
