@@ -2027,6 +2027,32 @@
   .candado-modal-val { color: var(--ink); font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
   .candado-modal-puntos { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--ink); }
   .candado-modal-nota { font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
+
+  /* Desliza para desbloquear (ver activarDeslizador_). Sin animaciones. */
+  .desliza-fila { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .desliza {
+    position: relative; flex: 1 1 auto; min-width: 0; height: 46px; border-radius: 23px;
+    background: #fceded; border: 1px solid #f3c6c6; overflow: hidden; user-select: none; touch-action: none;
+  }
+  .desliza-relleno { position: absolute; left: 0; top: 0; bottom: 0; width: 46px; background: #f6d4d4; border-radius: 23px; }
+  .desliza-texto {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-left: 40px;
+    font-size: 13px; font-weight: 700; color: var(--danger); pointer-events: none; white-space: nowrap;
+  }
+  .modal-actions .desliza-mando, .desliza-mando {
+    position: absolute; left: 4px; top: 4px; width: 38px; height: 38px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; cursor: grab;
+    background: var(--danger); color: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .18); touch-action: none;
+  }
+  .desliza-mando svg { width: 18px; height: 18px; pointer-events: none; }
+  .desliza.arrastrando .desliza-mando { cursor: grabbing; }
+  .desliza-mando:focus-visible { outline: 3px solid rgba(201, 79, 79, .35); outline-offset: 2px; }
+  .desliza:not(.arrastrando):not(.completo) .desliza-mando,
+  .desliza:not(.arrastrando):not(.completo) .desliza-relleno { transition: transform .2s, width .2s; }
+  .desliza.completo { background: #e4f3ec; border-color: #bfe3cf; }
+  .desliza.completo .desliza-relleno { background: #e4f3ec; }
+  .desliza.completo .desliza-mando { background: var(--ok); }
+  .desliza-fila .modal-cancel { flex-shrink: 0; }
   .table-wrap[hidden] { display: none; }
 
   /* Casillas apagadas por el bloqueo (operarios). */
