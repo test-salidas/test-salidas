@@ -220,15 +220,15 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     '</div></div>' +
     (seccion.tieneViernes ? '<span class="badge-total-viernes" title="Palets de VIERNES: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Viernes:&nbsp;<span class="total-viernes-valor">0</span></span>' : '') +
     (seccion.tieneCasillaDomingo ? '<span class="badge-total-domingo" title="Palets de DOMINGO: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Domingo:&nbsp;<span class="total-domingo-valor">0</span></span>' : '') +
-    // VERIFICAR CONTEO: administradores (eligen la nave en un modal) y
-    // operarios con nave (solo la suya). Los operarios sin nave no lo ven.
-    (editable && seccion.estado !== 'enviado' && (esAdmin() || restringidoANave_())
-      ? '<span class="verif-wrap"></span>'
-      : '') +
     '<span class="badge-total-palets"><span class="total-palets-valor">0</span>&nbsp;palets</span>' +
     htmlBotonListaCarga_(seccion) +
     htmlMenuEnvios_ +
     htmlMenuDescargas_ +
+    // VERIFICAR CONTEO (icono de check): administradores (eligen la nave
+    // en un modal) y operarios con nave (solo la suya).
+    (editable && seccion.estado !== 'enviado' && (esAdmin() || restringidoANave_())
+      ? '<span class="verif-wrap"></span>'
+      : '') +
     '<button type="button" class="btn-candado-carga" hidden aria-label="Conteo bloqueado">' + SVG_CANDADO_CARGA_ + '</button>' +
     '<button type="button" class="btn-toggle-colapsar" title="Contraer / expandir">' +
     '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
@@ -1325,35 +1325,39 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
 
     const wrap = header.querySelector('.verif-wrap');
     if (!wrap) return;
+    // VERIFICAR CONTEO como icono de check (el detalle ya lo dan las
+    // pastillas 60 / PTA / CART. junto al nombre). Colores:
+    //   normal = falta verificar · ok = verificado · aviso = cambiado tras
+    //   verificar · bloqueado = conteo bloqueado por la carga.
+    const icono = function (etiqueta, clase, titulo) {
+      return '<' + etiqueta + (etiqueta === 'button' ? ' type="button"' : '') +
+        ' class="btn-header-verificar btn-verif-icono' + (clase ? ' ' + clase : '') + '" title="' + escapeAttr(titulo) + '" aria-label="' + escapeAttr(titulo) + '">' +
+        SVG_CHECK_VERIF_ + '</' + etiqueta + '>';
+    };
     if (esAdmin()) {
-      wrap.innerHTML =
-        '<button type="button" class="btn-header-verificar" title="Elegir qué nave verificar">' + SVG_CHECK_VERIF_ +
-        'Verificar conteo' +
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
-        '</button>';
+      const todas = NAVES_CONTEO.every(function (n) { return v[n.campo]; });
+      const cambiada = NAVES_CONTEO.some(function (n) { return !v[n.campo] && seccion.cambiosVerif[n.campo]; });
+      wrap.innerHTML = icono('button', todas ? 'ok' : (cambiada ? 'aviso' : ''),
+        todas ? 'Conteo verificado en las 3 naves (pulsa para volver a verificar o anular)'
+          : (cambiada ? 'Hay que volver a verificar: se cambió después de verificar' : 'Verificar conteo (elegir nave)'));
       wrap.querySelector('button').onclick = function (e) { e.stopPropagation(); abrirModalVerificarAdmin_(); };
       return;
     }
     const campo = campoNaveSesion_();
     const n = naveDeCampo_(campo);
     const ver = v[campo];
-    // Conteo bloqueado por la carga ajustada: no se puede verificar (eso
-    // pone casillas a 0 y guarda). Lo ya verificado se sigue viendo.
-    if (!ver && bloqueadoParaMi_()) {
-      wrap.innerHTML = '<span class="btn-header-verificar bloqueado-carga" title="Conteo bloqueado: la carga está ajustada">' + SVG_CANDADO_CARGA_ + 'Verificar conteo</span>';
-      return;
-    }
     if (ver) {
-      wrap.innerHTML =
-        '<span class="verif-hecha">' +
-          '<span class="btn-header-verificar verificado">' + SVG_CHECK_VERIF_ + escapeHtml(n.etiqueta) + ' verificado</span>' +
-          '<span class="verif-quien">' + escapeHtml((ver.nombre || ver.usuario || '') + ' · ' + (ver.hora || '')) + '</span>' +
-        '</span>';
+      wrap.innerHTML = icono('span', 'ok', n.etiqueta + ' verificado por ' + (ver.nombre || ver.usuario || '') + (ver.hora ? ' a las ' + ver.hora : ''));
       return;
     }
-    wrap.innerHTML =
-      '<button type="button" class="btn-header-verificar" title="Verificar la columna ' + escapeAttr(n.etiqueta) + ' (' + escapeAttr(n.nave) + ')">' + SVG_CHECK_VERIF_ +
-      (seccion.cambiosVerif[campo] ? 'Volver a verificar' : 'Verificar conteo') + ' <span class="verif-chip">' + escapeHtml(n.etiqueta) + '</span></button>';
+    // Conteo bloqueado por la carga: no se puede verificar (eso pone
+    // casillas a 0 y guarda).
+    if (bloqueadoParaMi_()) {
+      wrap.innerHTML = icono('span', 'bloqueado', 'Conteo bloqueado: no se puede verificar');
+      return;
+    }
+    wrap.innerHTML = icono('button', seccion.cambiosVerif[campo] ? 'aviso' : '',
+      (seccion.cambiosVerif[campo] ? 'Volver a verificar ' : 'Verificar ') + 'la columna ' + n.etiqueta + ' (' + n.nave + ')');
     wrap.querySelector('button').onclick = function (e) {
       e.stopPropagation();
       const vacias = vaciasDeCampo_(campo);
