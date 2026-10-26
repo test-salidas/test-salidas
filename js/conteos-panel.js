@@ -76,6 +76,14 @@ const SVG_MENU_PREVISION_ = '<svg width="16" height="16" viewBox="0 0 24 24" fil
 const SVG_MENU_DEFINITIVO_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>';
 const SVG_MENU_INFORMATICA_ = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
 const SVG_MENU_CAMION_ = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h15v13H3z"/><path d="M18 8h3l3 3v5h-6"/><circle cx="7.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/></svg>';
+const SVG_DESCARGA_ = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
+// Hojita de color con el tipo (PDF / XLS / PDF+) para el menú de descargas.
+function SVG_DOC_(color, texto, tam) {
+  return '<svg width="16" height="18" viewBox="0 0 24 26" aria-hidden="true">' +
+    '<path d="M4 2h11l6 6v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="' + color + '"/>' +
+    '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
+    '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="' + tam + '" font-weight="800" fill="#ffffff">' + texto + '</text></svg>';
+}
 const SVG_OJO_ = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 // Pestaña elegida en cada agrupación con carga ajustada ("fecha|agrupación"
@@ -180,10 +188,24 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     ? '<span class="envios-wrap">' +
         '<button type="button" class="btn-menu-envios" title="Enviar por email" aria-label="Enviar por email" aria-haspopup="true" aria-expanded="false">' + SVG_SOBRE_ + '</button>' +
         '<div class="menu-envios" role="menu" hidden>' + htmlBotonesEnvio_ +
-          '<div class="menu-envios-aviso" hidden>Pulsa antes «Guardar conteo»</div>' +
+          '<div class="menu-envios-aviso" hidden>Guardando el conteo…</div>' +
         '</div>' +
       '</span>'
     : '';
+
+  // Botón de descarga (al lado del sobre): menú con PDF, Excel y, en las
+  // rutas que lo tienen, PDF especial. Son los mismos botones de antes.
+  const htmlMenuDescargas_ =
+    '<span class="envios-wrap descargas-wrap">' +
+      '<button type="button" class="btn-menu-envios btn-menu-descargas" title="Descargar PDF o Excel" aria-label="Descargar PDF o Excel" aria-haspopup="true" aria-expanded="false">' + SVG_DESCARGA_ + '</button>' +
+      '<div class="menu-envios menu-descargas" role="menu" hidden>' +
+        '<button type="button" class="btn-pdf-seccion menu-item" title="Generar PDF de esta agrupación">' + SVG_DOC_('#e0342a', 'PDF', 7.5) + '<span>PDF</span></button>' +
+        '<button type="button" class="btn-excel-seccion menu-item" title="Exportar a Excel esta agrupación">' + SVG_DOC_('#1d6f42', 'XLS', 7.5) + '<span>Excel</span></button>' +
+        (seccion.tienePdfEspecial
+          ? '<button type="button" class="btn-pdf-especial-seccion menu-item" title="Generar PDF especial (formato de reparto en camión) de esta agrupación">' + SVG_DOC_('var(--prevision)', 'PDF+', 6) + '<span>PDF especial (reparto en camión)</span></button>'
+          : '') +
+      '</div>' +
+    '</span>';
 
   const header = document.createElement('div');
   header.className = 'seccion-header';
@@ -198,9 +220,15 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     '</div></div>' +
     (seccion.tieneViernes ? '<span class="badge-total-viernes" title="Palets de VIERNES: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Viernes:&nbsp;<span class="total-viernes-valor">0</span></span>' : '') +
     (seccion.tieneCasillaDomingo ? '<span class="badge-total-domingo" title="Palets de DOMINGO: suman al TOTAL de cada tienda, pero no al total de palets de la carga">Domingo:&nbsp;<span class="total-domingo-valor">0</span></span>' : '') +
+    // VERIFICAR CONTEO: administradores (eligen la nave en un modal) y
+    // operarios con nave (solo la suya). Los operarios sin nave no lo ven.
+    (editable && seccion.estado !== 'enviado' && (esAdmin() || restringidoANave_())
+      ? '<span class="verif-wrap"></span>'
+      : '') +
     '<span class="badge-total-palets"><span class="total-palets-valor">0</span>&nbsp;palets</span>' +
     htmlBotonListaCarga_(seccion) +
     htmlMenuEnvios_ +
+    htmlMenuDescargas_ +
     '<button type="button" class="btn-candado-carga" hidden aria-label="Conteo bloqueado">' + SVG_CANDADO_CARGA_ + '</button>' +
     '<button type="button" class="btn-toggle-colapsar" title="Contraer / expandir">' +
     '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
@@ -220,48 +248,9 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       '<button type="button" class="vista-carga-tab" data-vista="real" role="tab">' + SVG_OJO_ + '<span>Ver conteo real sin ajustar</span><span class="vista-carga-num"></span></button>' +
     '</div>' +
     '</div>' +
-    '<div class="seccion-header-extra">' +
-    // VERIFICAR CONTEO: administradores (eligen la nave en un modal) y
-    // operarios con nave (solo la suya). Los operarios sin nave no lo ven.
-    (editable && seccion.estado !== 'enviado' && (esAdmin() || restringidoANave_())
-      ? '<span class="verif-wrap"></span>'
-      : '') +
-    (editable && seccion.estado !== 'enviado'
-      ? '<button type="button" class="btn-header-guardar sin-cambios" title="Guarda el conteo de esta agrupación. Los botones de envío no se activan hasta pulsar aquí.">Guardar conteo</button>' +
-        '<span class="ultimo-guardado"></span>'
-      : '') +
-    '<button type="button" class="btn-add-nota" title="Añadir nota a esta agrupación">' +
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>' +
-    '<button type="button" class="btn-pdf-seccion" title="Generar PDF de esta agrupación">' +
-    '<svg width="16" height="18" viewBox="0 0 24 26">' +
-    '<path d="M4 2h11l6 6v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#e0342a"/>' +
-    '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
-    '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="800" fill="#ffffff">PDF</text>' +
-    '</svg></button>' +
-    '<button type="button" class="btn-excel-seccion" title="Exportar a Excel esta agrupación">' +
-    '<svg width="16" height="18" viewBox="0 0 24 26">' +
-    '<path d="M4 2h11l6 6v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#1d6f42"/>' +
-    '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
-    '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="800" fill="#ffffff">XLS</text>' +
-    '</svg></button>' +
-    (seccion.tienePdfEspecial
-      ? '<button type="button" class="btn-pdf-especial-seccion" title="Generar PDF especial (formato de reparto en camión) de esta agrupación">' +
-        '<svg width="16" height="18" viewBox="0 0 24 26">' +
-        '<path d="M4 2h11l6 6v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--prevision)"/>' +
-        '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
-        '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="6" font-weight="800" fill="#ffffff">PDF+</text>' +
-        '</svg></button>'
-      : '') +
-    '</div>' +
     '</div>';
   panel.appendChild(header);
 
-  header.querySelector('.btn-add-nota').onclick = function (e) {
-    e.stopPropagation();
-    appPrompt('Nota para ' + seccion.nombre, 'Escribe una observación para esta agrupación…', function (texto) {
-      guardarObservacionYRecargar({ fecha: fecha, dia: dia, agrupacion: seccion.nombre, tienda: '', tipo: 'nota', texto: texto });
-    });
-  };
   header.addEventListener('click', function (e) {
     if (!e.target.closest('.btn-toggle-colapsar')) return;
     panel.classList.toggle('colapsada');
@@ -326,6 +315,19 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       else abrirMenuEnvios_(btnMenuEnvios, menuEnvios, enviosWrap);
     };
     menuEnvios.addEventListener('click', function (e) {
+      if (e.target.closest('button')) cerrarMenuEnvios_();
+    }, true);
+  }
+  const btnMenuDescargas = header.querySelector('.btn-menu-descargas');
+  const menuDescargas = header.querySelector('.menu-descargas');
+  const descargasWrap = header.querySelector('.descargas-wrap');
+  if (btnMenuDescargas && menuDescargas) {
+    btnMenuDescargas.onclick = function (e) {
+      e.stopPropagation();
+      if (MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menuDescargas) cerrarMenuEnvios_();
+      else abrirMenuEnvios_(btnMenuDescargas, menuDescargas, descargasWrap);
+    };
+    menuDescargas.addEventListener('click', function (e) {
       if (e.target.closest('button')) cerrarMenuEnvios_();
     }, true);
   }
@@ -447,6 +449,16 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       badge.remove();
     }
     pintarEstadoBloqueo_();
+  }
+
+  // Segunda línea de la cabecera (badges de previsión/solo lectura y
+  // pestañas de carga): se oculta si no tiene nada, para no dejar hueco.
+  function actualizarFilaMeta_() {
+    const meta = header.querySelector('.seccion-header-meta');
+    if (!meta) return;
+    const badges = header.querySelector('.seccion-header-badges');
+    const tabs = header.querySelector('.vista-carga-tabs');
+    meta.hidden = !((badges && badges.children.length) || (tabs && !tabs.hidden));
   }
 
   /* ---------------- CARGA AJUSTADA = CONTEO BLOQUEADO ----------------
@@ -599,6 +611,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       if (el) el.textContent = totalCargaAjustada_();
       if (badgePalets) { badgePalets.classList.add('es-ajustada'); badgePalets.title = 'Palets de la carga ' + (esCargaEnviada_() ? 'enviada' : 'ajustada') + ' (contados: ' + totalContadoAhora_() + ')'; }
     }
+
+    actualizarFilaMeta_();
 
     // Si el bloqueo ha cambiado, el botón VERIFICAR CONTEO también.
     if (bloqueoPintado_ !== null && bloqueoPintado_ !== bloqueado) pintarVerificaciones_();
@@ -1023,6 +1037,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   const btnGuardarConteo = header.querySelector('.btn-header-guardar');
   const spanUltimoGuardado = header.querySelector('.ultimo-guardado');
   let hayCambiosSinGuardar = false;
+  let guardandoAhora_ = false; // guardado en vuelo (antes lo indicaba el botón "Guardar conteo" deshabilitado)
   let haGuardadoAlMenosUnaVez = sumaInicialPalets > 0;
   let ultimoGuardadoEn = null; // Date del último guardado con éxito (esta sesión)
   let timerAutoguardadoInactividad_ = null; // ver marcarCambiosSinGuardar_ / RESPALDO POR INACTIVIDAD más abajo
@@ -1044,7 +1059,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       if (seccion.estado === 'enviado' && btn.classList.contains('btn-header-informatica')) { btn.disabled = false; return; }
       if (!btn.hasAttribute('data-title-original')) btn.setAttribute('data-title-original', btn.title);
       btn.disabled = bloquear;
-      btn.title = bloquear ? 'Pulsa antes "Guardar conteo"' : btn.getAttribute('data-title-original');
+      btn.title = bloquear ? (hayCambiosSinGuardar ? 'Guardando el conteo…' : 'Todavía no hay conteo guardado') : btn.getAttribute('data-title-original');
     });
     actualizarMenuEnvios_();
   }
@@ -1056,7 +1071,10 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     if (!menu || !wrap) return;
     const botones = menu.querySelectorAll('.btn-header-prevision, .btn-header-definitivo, .btn-header-informatica');
     const aviso = menu.querySelector('.menu-envios-aviso');
-    if (aviso) aviso.hidden = !Array.prototype.some.call(botones, function (b) { return b.disabled; });
+    if (aviso) {
+      aviso.hidden = !Array.prototype.some.call(botones, function (b) { return b.disabled; });
+      aviso.textContent = hayCambiosSinGuardar ? 'Guardando el conteo…' : 'Todavía no hay conteo guardado';
+    }
     wrap.hidden = botones.length === 0;
     if (!botones.length && MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menu) cerrarMenuEnvios_();
   }
@@ -1109,10 +1127,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     if (!hayCambiosSinGuardar) { marcarTodoGuardado_(); if (onDone) onDone(true); return; }
     const filas = recogerFilas(tableWrap);
     marcarGuardando(panel, true);
+    guardandoAhora_ = true;
     if (btnGuardarConteo) btnGuardarConteo.disabled = true;
     llamarApi_('guardarConteo', [dia, filas, fecha, seccion.nombre])
       .then(function () {
         marcarGuardando(panel, false);
+        guardandoAhora_ = false;
         if (btnGuardarConteo) btnGuardarConteo.disabled = false;
         marcarTodoGuardado_();
         marcarGuardadoAhora_();
@@ -1120,6 +1140,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       })
       .catch(function (err) {
         marcarGuardando(panel, false);
+        guardandoAhora_ = false;
         if (btnGuardarConteo) btnGuardarConteo.disabled = false;
         marcarCambiosSinGuardar_(); // el guardado falló: sigue habiendo cambios sin guardar
         mostrarErrorServidor(err);
@@ -1806,6 +1827,7 @@ if (callback) callback(true, mensaje);
       const btnPrevisionEl = header.querySelector('.btn-header-prevision');
       if (btnPrevisionEl) btnPrevisionEl.remove();
       actualizarMenuEnvios_();
+      actualizarFilaMeta_();
       actualizarMenuRapidoItem_(seccion);
       cargaTrasEnvio_('prevision', resultado);
       actualizarEstadoCarga_();
@@ -1880,6 +1902,7 @@ if (callback) callback(true, mensaje);
   // arriba), después del primer pintado: se repinta la vista ajustada ya
   // con todos los totales.
   if (seccion.carga !== undefined) pintarEstadoBloqueo_();
+  actualizarFilaMeta_();
 
   panel._firma = JSON.stringify([seccion, dia, esHoy]);
   panel._enUso = function () {
@@ -1893,8 +1916,8 @@ if (callback) callback(true, mensaje);
     // eso el "cursor puesto en un campo" solo cuenta como "en uso" si la
     // ventana realmente tiene el foco en este instante; los cambios sin
     // guardar o un guardado en curso sí protegen siempre, foco o no.
-    if (MENU_ENVIOS_ABIERTO_ && MENU_ENVIOS_ABIERTO_.menu === menuEnvios) return true;
-    return hayCambiosSinGuardar || (btnGuardarConteo && btnGuardarConteo.disabled) || (document.hasFocus() && panel.contains(document.activeElement));
+    if (MENU_ENVIOS_ABIERTO_ && (MENU_ENVIOS_ABIERTO_.menu === menuEnvios || MENU_ENVIOS_ABIERTO_.menu === menuDescargas)) return true;
+    return hayCambiosSinGuardar || guardandoAhora_ || (document.hasFocus() && panel.contains(document.activeElement));
   };
 
   return panel;
