@@ -216,7 +216,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     // carga ajustada; ver pintarEstadoBloqueo_).
     '<div class="seccion-header-acciones">' +
     '<div class="vista-carga-tabs" role="tablist" hidden>' +
-      '<button type="button" class="vista-carga-tab" data-vista="ajustada" role="tab">' + SVG_MENU_CAMION_ + '<span>Carga ajustada</span><span class="vista-carga-num"></span></button>' +
+      '<button type="button" class="vista-carga-tab" data-vista="ajustada" role="tab">' + SVG_MENU_CAMION_ + '<span class="vista-carga-etiqueta">Carga ajustada</span><span class="vista-carga-num"></span></button>' +
       '<button type="button" class="vista-carga-tab" data-vista="real" role="tab">' + SVG_OJO_ + '<span>Ver conteo real sin ajustar</span><span class="vista-carga-num"></span></button>' +
     '</div>' +
     '</div>' +
@@ -470,17 +470,45 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const c = seccion.carga || {};
     return [c.por, c.hora].filter(Boolean).join(' · ');
   }
+  // Tiendas cuya carga (ajustada, de la previsión o del definitivo ya
+  // enviado) no coincide con lo contado: { 'NOMBRE TIENDA': palets }.
+  // Es lo que enseñan las pestañas "Carga ajustada / enviada" y "Ver
+  // conteo real sin ajustar". Mientras la carga se puede tocar es lo mismo
+  // que ajustesGuardados_(); con el definitivo enviado se lee de la carga
+  // que se mandó (ahí ya no hay candado: el conteo está archivado).
+  function ajustesParaVista_() {
+    if (cargaEditable_()) return ajustesGuardados_();
+    const res = {};
+    const c = seccion.carga;
+    if (!c || !Array.isArray(c.lista)) return res;
+    const abiertas = {};
+    const divididas = tiendasDivididas_();
+    filasCargaActuales_().forEach(function (f) { if (!f.cerrada) abiertas[f.nombre] = true; });
+    c.lista.forEach(function (t) {
+      if (t.cerrada || t.cargar === null || t.cargar === undefined || !abiertas[t.tienda]) return;
+      if (Number(t.cargar) !== Number(t.contados) || divididas[t.tienda]) res[t.tienda] = Number(t.cargar);
+    });
+    return res;
+  }
+  function esCargaEnviada_() {
+    return seccion.estado === 'enviado' || !!(seccion.carga && seccion.carga.origen === 'definitivo');
+  }
   function totalCargaAjustada_() {
-    return listaCargaEfectiva_().reduce(function (s, t) { return s + (t.cerrada ? 0 : (Number(t.cargar) || 0)); }, 0);
+    const ajustes = ajustesParaVista_();
+    return filasCargaActuales_().reduce(function (s, f) {
+      if (f.cerrada) return s;
+      return s + (Object.prototype.hasOwnProperty.call(ajustes, f.nombre) ? ajustes[f.nombre] : (Number(f.contados) || 0));
+    }, 0);
   }
   function totalContadoAhora_() {
     return filasCargaActuales_().reduce(function (s, f) { return s + (f.cerrada ? 0 : (Number(f.contados) || 0)); }, 0);
   }
   let bloqueoPintado_ = null; // último estado de bloqueo aplicado (null = todavía ninguno)
   function pintarEstadoBloqueo_() {
-    const hay = hayCargaAjustada_();
+    const hay = hayCargaAjustada_();             // carga ajustada que aún se puede tocar -> candado
+    const hayVista = Object.keys(ajustesParaVista_()).length > 0; // lo cargado ≠ lo contado -> pestañas
     const bloqueado = bloqueadoParaMi_();
-    const verReal = !hay || !!VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
+    const verReal = !hayVista || !!VISTA_CONTEO_REAL_[fecha + '|' + seccion.nombre];
 
     // Casillas de la tabla real: se apagan solo las que estaban
     // encendidas (y se marcan), para no encender al desbloquear las que
@@ -519,13 +547,15 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     // Pestañas "Carga ajustada" / "Ver conteo real sin ajustar".
     const tabs = header.querySelector('.vista-carga-tabs');
     if (tabs) {
-      tabs.hidden = !hay;
+      tabs.hidden = !hayVista;
+      const etiqueta = tabs.querySelector('[data-vista="ajustada"] .vista-carga-etiqueta');
+      if (etiqueta) etiqueta.textContent = esCargaEnviada_() ? 'Carga enviada' : 'Carga ajustada';
       tabs.querySelectorAll('.vista-carga-tab').forEach(function (t) {
         const activa = (t.getAttribute('data-vista') === 'real') === verReal;
         t.classList.toggle('activa', activa);
         t.setAttribute('aria-selected', activa ? 'true' : 'false');
       });
-      if (hay) {
+      if (hayVista) {
         tabs.querySelector('[data-vista="ajustada"] .vista-carga-num').textContent = totalCargaAjustada_();
         tabs.querySelector('[data-vista="real"] .vista-carga-num').textContent = totalContadoAhora_();
       }
@@ -543,7 +573,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       pintarVistaAjustada_();
       const el = header.querySelector('.total-palets-valor');
       if (el) el.textContent = totalCargaAjustada_();
-      if (badgePalets) { badgePalets.classList.add('es-ajustada'); badgePalets.title = 'Palets de la carga ajustada (contados: ' + totalContadoAhora_() + ')'; }
+      if (badgePalets) { badgePalets.classList.add('es-ajustada'); badgePalets.title = 'Palets de la carga ' + (esCargaEnviada_() ? 'enviada' : 'ajustada') + ' (contados: ' + totalContadoAhora_() + ')'; }
     }
 
     // Si el bloqueo ha cambiado, el botón VERIFICAR CONTEO también.
@@ -556,7 +586,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   // siempre: primero PTA, luego CART. y por último 60. Las casillas que
   // cambian salen en azul (con lo contado al pasar el ratón).
   function pintarVistaAjustada_() {
-    const ajustes = ajustesGuardados_();
+    const ajustes = ajustesParaVista_();
     const original = tableWrap.querySelector('table.conteo');
     if (!original) return;
     const tabla = original.cloneNode(true);
@@ -613,7 +643,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
         const exceso = limite ? totalVisto - limite : 0;
         if (exceso >= 3) { tr.classList.add('fila-alerta'); nota.classList.add('alerta'); nota.textContent = '+' + exceso + ' sobre el límite — consultar a informática'; }
         else if (exceso >= 1) { tr.classList.add('fila-aviso'); nota.classList.add('aviso'); nota.textContent = '+' + exceso + ' sobre el límite — ceñirse al límite'; }
-        else { nota.classList.add('ajuste'); nota.textContent = 'Contado ' + contados + ' → carga ' + cargar; }
+        else { nota.classList.add('ajuste'); nota.textContent = 'Contado ' + contados + ' → ' + (esCargaEnviada_() ? 'enviado ' : 'carga ') + cargar; }
       }
     });
     vistaAjustadaWrap.innerHTML = '';
