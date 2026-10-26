@@ -1,5 +1,13 @@
 /* SALIDAS · js/conteos-pdf.js — Conteos diarios: PDF de agrupación y PDF especial */
 
+/** Texto de una tienda con el conteo bloqueado (antes "tienda cerrada"):
+ *  solo la observación que se escribió al bloquear, sin añadir "CERRADA". */
+function textoBloqueoFila_(tr) {
+  const motivo = tr.querySelector('.motivo-cierre');
+  const texto = motivo ? motivo.textContent.trim() : '';
+  return texto || 'CONTEO BLOQUEADO';
+}
+
 /**
  * Genera y descarga un PDF con el conteo completo de una agrupación: todas
  * sus tiendas y casillas (Límite, 60, PTA, CART., TOTAL, PDTE), tal cual
@@ -21,10 +29,23 @@
 const PDF_ANCHO_MM_ = 297; // ancho fijo tipo A4 apaisado
 const PDF_ALTO_A4_MM_ = 210; // alto estándar de un A4 apaisado
 
+/** Columnas VIERNES y DOMINGO en el PDF (solo si la agrupación las tiene
+ *  activadas ese día): van justo después de "Límite", igual que en
+ *  pantalla, así que cada una desplaza una posición el resto de columnas
+ *  (TOTAL pasa del índice 5 al 6, o al 7 si están las dos). */
+function indiceTotalPdf_(seccion) {
+  return 5 + (seccion.tieneViernes ? 1 : 0) + (seccion.tieneCasillaDomingo ? 1 : 0);
+}
+
 /** Lee de la tabla en pantalla (no de "seccion", para incluir cambios aún
- *  sin guardar) las filas [tienda, límite, 60, PTA, CART., TOTAL, PDTE, (PESO), (C.EXPRESS), (SOBRESTOCK)]. */
+ *  sin guardar) las filas [tienda, límite, (VIERNES), (DOMINGO), 60, PTA, CART., TOTAL, PDTE, (PESO), (C.EXPRESS), (SOBRESTOCK)].
+ *  Con VIERNES / DOMINGO, el TOTAL de cada tienda los incluye (como en
+ *  pantalla) y el total de la carga sin ellos se guarda aparte en
+ *  fila._carga, para la fila de TOTAL GENERAL. */
 function leerFilasPdfSeccion_(tableWrap, seccion) {
   const filas = [];
+  const conViernes = !!seccion.tieneViernes;
+  const conDomingo = !!seccion.tieneCasillaDomingo;
   tableWrap.querySelectorAll('table.conteo tbody tr').forEach(function (tr) {
     if (tr.classList.contains('fila-grupo-header')) return;
 
@@ -34,9 +55,10 @@ function leerFilasPdfSeccion_(tableWrap, seccion) {
       const limiteCelda = tr.querySelector('td.limite');
       filas.push([
         nombre,
-        limiteCelda ? limiteCelda.textContent.trim() : '',
-        'CERRADA', '', '', '', ''
-      ].concat(seccion.tienePeso ? [''] : []).concat(seccion.tieneCExpress ? [''] : []).concat(seccion.tieneSobrestock ? [''] : []));
+        limiteCelda ? limiteCelda.textContent.trim() : ''
+      ].concat(conViernes ? [''] : []).concat(conDomingo ? [''] : []).concat([
+        textoBloqueoFila_(tr), '', '', '', ''
+      ]).concat(seccion.tienePeso ? [''] : []).concat(seccion.tieneCExpress ? [''] : []).concat(seccion.tieneSobrestock ? [''] : []));
       return;
     }
 
@@ -45,9 +67,10 @@ function leerFilasPdfSeccion_(tableWrap, seccion) {
       const motivo = tr.querySelector('.motivo-excepcion');
       filas.push([
         nombre,
-        limiteCelda ? limiteCelda.textContent.trim() : '',
+        limiteCelda ? limiteCelda.textContent.trim() : ''
+      ].concat(conViernes ? [''] : []).concat(conDomingo ? [''] : []).concat([
         motivo ? motivo.textContent.trim() : 'SALE POR EXCEPCIÓN', '', '', '', ''
-      ].concat(seccion.tienePeso ? [''] : []).concat(seccion.tieneCExpress ? [''] : []).concat(seccion.tieneSobrestock ? [''] : []));
+      ]).concat(seccion.tienePeso ? [''] : []).concat(seccion.tieneCExpress ? [''] : []).concat(seccion.tieneSobrestock ? [''] : []));
       return;
     }
 
@@ -56,15 +79,42 @@ function leerFilasPdfSeccion_(tableWrap, seccion) {
       return inp ? inp.value : '';
     }
 
-    filas.push([
+    const totalCarga = valorCampo('total');
+    let totalTienda = totalCarga;
+    let celdaViernes = [];
+    if (conViernes) {
+      const excluida = tr.querySelector('.celda-viernes-excluida');
+      const vieTxt = excluida ? 'X' : valorCampo('viernes');
+      const vie = parseFloat(vieTxt);
+      if (!isNaN(vie) && vie !== 0) {
+        totalTienda = String((parseFloat(totalCarga) || 0) + vie);
+      }
+      celdaViernes = [vieTxt];
+    }
+    // DOMINGO: igual que VIERNES.
+    let celdaDomingo = [];
+    if (conDomingo) {
+      const excluidaD = tr.querySelector('.celda-domingo-excluida');
+      const domTxt = excluidaD ? 'X' : valorCampo('casillaDomingo');
+      const dom = parseFloat(domTxt);
+      if (!isNaN(dom) && dom !== 0) {
+        totalTienda = String((parseFloat(totalTienda) || 0) + dom);
+      }
+      celdaDomingo = [domTxt];
+    }
+
+    const fila = [
       nombre,
-      tr.getAttribute('data-limite') || '',
+      tr.getAttribute('data-limite') || ''
+    ].concat(celdaViernes).concat(celdaDomingo).concat([
       valorCampo('c60'),
       valorCampo('pta'),
       valorCampo('cart'),
-      valorCampo('total'),
+      totalTienda,
       valorCampo('pdte')
-    ].concat(seccion.tienePeso ? [valorCampo('peso')] : []).concat(seccion.tieneCExpress ? [valorCampo('cexpress')] : []).concat(seccion.tieneSobrestock ? [valorCampo('sobrestock')] : []));
+    ]).concat(seccion.tienePeso ? [valorCampo('peso')] : []).concat(seccion.tieneCExpress ? [valorCampo('cexpress')] : []).concat(seccion.tieneSobrestock ? [valorCampo('sobrestock')] : []);
+    fila._carga = totalCarga;
+    filas.push(fila);
   });
   return filas;
 }
@@ -120,11 +170,30 @@ function dibujarPdfSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, f
   // cerradas (misma lógica que el total que se ve en el chip de cabecera
   // de la agrupación en pantalla). El resto de columnas de esa fila se
   // dejan en blanco salvo "Tienda", donde va la etiqueta.
+  // Con VIERNES: el TOTAL GENERAL sigue siendo solo la carga (sin viernes,
+  // igual que el chip de palets de la cabecera), y la suma de VIERNES va
+  // aparte en su propia columna de esa misma fila.
+  const idxTotal = indiceTotalPdf_(seccion);
   const totalGeneral = filas.reduce(function (acc, fila) {
-    const v = parseFloat(fila[5]); // índice 5 = TOTAL
+    const v = parseFloat(fila._carga !== undefined ? fila._carga : fila[idxTotal]);
     return acc + (isNaN(v) ? 0 : v);
   }, 0);
-  const filaTotal = ['TOTAL GENERAL', '', '', '', '', String(totalGeneral), '']
+  // DOMINGO funciona igual que VIERNES (su suma, en su propia columna).
+  const sumaColumnaPdf = function (idx) {
+    return filas.reduce(function (acc, fila) {
+      const v = parseFloat(fila[idx]);
+      return acc + (isNaN(v) ? 0 : v);
+    }, 0);
+  };
+  const extrasFuera = [];
+  if (seccion.tieneViernes) extrasFuera.push('viernes');
+  if (seccion.tieneCasillaDomingo) extrasFuera.push('domingo');
+  let filaTotal = [extrasFuera.length ? 'TOTAL CARGA (sin ' + extrasFuera.join(' ni ') + ')' : 'TOTAL GENERAL', ''];
+  let idxCol = 2;
+  if (seccion.tieneViernes) { filaTotal.push(String(sumaColumnaPdf(idxCol))); idxCol++; }
+  if (seccion.tieneCasillaDomingo) { filaTotal.push(String(sumaColumnaPdf(idxCol))); idxCol++; }
+  filaTotal = filaTotal.concat(['', '', '', String(totalGeneral), '']);
+  filaTotal = filaTotal
     .concat(seccion.tienePeso ? [''] : [])
     .concat(seccion.tieneCExpress ? [''] : [])
     .concat(seccion.tieneSobrestock ? [''] : []);
@@ -133,15 +202,16 @@ function dibujarPdfSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, f
 
   doc.autoTable({
     startY: y,
-    head: [['Tienda', 'Límite', '60', 'PTA', 'CART.', 'TOTAL', 'PDTE'].concat(seccion.tienePeso ? ['PESO'] : []).concat(seccion.tieneCExpress ? ['C.EXPRESS'] : []).concat(seccion.tieneSobrestock ? ['SOBRESTOCK'] : [])],
+    head: [['Tienda', 'Límite'].concat(seccion.tieneViernes ? ['VIERNES'] : []).concat(seccion.tieneCasillaDomingo ? ['DOMINGO'] : []).concat(['60', 'PTA', 'CART.', 'TOTAL', 'PDTE']).concat(seccion.tienePeso ? ['PESO'] : []).concat(seccion.tieneCExpress ? ['C.EXPRESS'] : []).concat(seccion.tieneSobrestock ? ['SOBRESTOCK'] : [])],
     body: filasConTotal,
     styles: { fontSize: 9, cellPadding: 2.5, valign: 'middle', halign: 'center' },
     headStyles: { fillColor: [28, 43, 69], textColor: 255, halign: 'center' },
     bodyStyles: { halign: 'center' },
-    columnStyles: {
-      0: { fontStyle: 'bold', fontSize: 11, halign: 'left' },
-      5: { fontStyle: 'bold' }
-    },
+    columnStyles: (function () {
+      const cs = { 0: { fontStyle: 'bold', fontSize: 11, halign: 'left' } };
+      cs[idxTotal] = { fontStyle: 'bold' };
+      return cs;
+    })(),
     // La fila de TOTAL GENERAL se pinta con un fondo distinto y en negrita,
     // igual que una fila de cierre en una tabla contable.
     didParseCell: function (data) {
@@ -297,7 +367,7 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
         const limiteCelda = tr.querySelector('td.limite');
         celdasPropias = [
           limiteCelda ? limiteCelda.textContent.trim() : '', nombre,
-          { content: 'CERRADA', colSpan: 4, styles: { fontStyle: 'bold', textColor: [201, 79, 79] } }
+          { content: textoBloqueoFila_(tr), colSpan: 4, styles: { fontStyle: 'bold', textColor: [201, 79, 79] } }
         ];
       } else if (tr.classList.contains('fila-sale-excepcion')) {
         const limiteCelda = tr.querySelector('td.limite');

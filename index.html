@@ -18,44 +18,119 @@
 </head>
 <body>
 
+  <!-- INSTALACIÓN OBLIGATORIA (PWA): igual que en GIDT. Tapa la app desde el
+       primer instante (class "show" por defecto) y NO se cierra con click
+       fuera ni con Escape. js/instalar-app.js lo oculta solo si detecta que
+       la app se está ejecutando ya instalada (modo standalone). -->
+  <div class="instalar-overlay show" id="instalarAppModalOverlay">
+    <div class="instalar-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="instalarModalTitulo">
+      <div class="instalar-modal-icono"><img src="icon-192.png" alt=""></div>
+      <h3 class="instalar-modal-titulo" id="instalarModalTitulo">Instala la app para continuar</h3>
+      <p class="instalar-modal-mensaje">Esta aplicación debe usarse instalada en el dispositivo (no desde el navegador) para que todo funcione correctamente.</p>
+      <div class="instalar-modal-pasos">
+        <b>Cómo instalarla:</b>
+        <ol>
+          <li>Toca el botón <b>"Instalar App"</b> de abajo.</li>
+          <li>Confirma pulsando <b>"Instalar"</b> en el aviso que aparecerá.</li>
+          <li>Abre la app desde el icono nuevo en tu pantalla de inicio.</li>
+        </ol>
+      </div>
+      <p class="instalar-modal-ayuda" id="instalarAppAyuda">
+        Tu navegador no permite instalar la app automáticamente desde aquí. En Chrome o Edge, abre el menú (⋮ arriba a la derecha) y elige <b>"Instalar aplicación"</b> (o el icono ⊕ en la barra de direcciones). En iPhone/iPad (Safari), toca el icono de compartir y luego <b>"Añadir a pantalla de inicio"</b>.
+      </p>
+      <div class="instalar-modal-botones">
+        <button type="button" class="instalar-btn instalar-btn-principal" id="btnInstalarApp"><span id="btnInstalarAppTexto">⬇️ Instalar App</span></button>
+        <button type="button" class="instalar-btn instalar-btn-secundario" id="btnYaInstalada">Ya la tengo instalada · Recargar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- LOGIN -->
   <div id="login-screen">
-    <div class="login-card">
-      <div class="login-logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#f3f4f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/>
-          <circle cx="7.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
-          <circle cx="17.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
-        </svg>
-      </div>
-      <h1>Gestión Salidas</h1>
-      <p class="sub">Gestión de conteos y avisos a tiendas y agencias</p>
-
-      <div class="campo-pass">
-        <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-        </svg>
-        <input type="text" id="login-usuario" placeholder="Usuario" autocomplete="username" autofocus>
-      </div>
-      <div class="campo-pass">
-        <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-        </svg>
-        <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password">
-        <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>
+    <!-- Animación de fondo: partículas según la estación, interactivas (js/login-estaciones.js; la foto se mueve por CSS) -->
+    <div class="login-polvo" id="login-polvo"></div>
+    <!-- Izquierda: la foto del almacén con el nombre y lo que hace la app
+         (en pantallas estrechas solo queda la marca, encima del panel). -->
+    <div class="login-hero">
+      <div class="login-entra login-brand" style="animation-delay:0.1s">
+        <div class="login-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/>
+            <circle cx="7.5" cy="18" r="1.6" fill="#fff" stroke="none"/>
+            <circle cx="17.5" cy="18" r="1.6" fill="#fff" stroke="none"/>
           </svg>
-        </button>
+        </div>
+        <div class="login-brand-txt">PRIMOR<small>Transporte</small></div>
       </div>
-
-      <button class="btn-primary" id="btn-login" onclick="intentarLogin()">
-        <span class="spinner" id="login-spinner"></span>
-        <span id="login-btn-text">Entrar</span>
-      </button>
-      <p id="login-error">Usuario o contraseña incorrectos</p>
+      <div class="login-hero-txt">
+        <span class="login-entra login-eyebrow" style="animation-delay:0.3s">Gestión Salidas</span>
+        <h2 class="login-entra" style="animation-delay:.45s">Cada palet,<br>en su camión.</h2>
+        <p class="login-entra" style="animation-delay:.6s">Conteos diarios, avisos a tiendas y agencias, y carga de camiones desde un mismo sitio.</p>
+        <div class="login-feat">
+          <div class="login-entra" style="animation-delay:0.8s"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg></i>Conteos por nave y verificación</div>
+          <div class="login-entra" style="animation-delay:0.95s"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg></i>Previsión y definitivo a agencias</div>
+          <div class="login-entra" style="animation-delay:1.1s"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/></svg></i>Ajuste de carga y matrículas</div>
+          <div class="login-entra" style="animation-delay:1.25s"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></i>Avisos automáticos a tiendas</div>
+        </div>
+      </div>
+      <!-- Camión que recorre las tres naves y carga un palet en cada una -->
+      <div class="login-carril login-entra" style="animation-delay:1.45s" aria-hidden="true">
+        <span class="login-nave n1">GAITE</span><span class="login-nave n2">PTA</span><span class="login-nave n3">CARTAMA</span>
+        <div class="login-linea"></div>
+        <svg class="login-camion" viewBox="0 0 46 26"><g class="bote">
+          <rect x="1" y="4" width="28" height="15" rx="2" fill="#fff"/>
+          <rect class="p p1" x="4" y="8" width="6" height="8" rx="1" fill="#d98c2b"/>
+          <rect class="p p2" x="12" y="8" width="6" height="8" rx="1" fill="#d98c2b"/>
+          <rect class="p p3" x="20" y="8" width="6" height="8" rx="1" fill="#d98c2b"/>
+          <path d="M30 8h8l6 6v5H30z" fill="#fff"/><path d="M32 10h5l3.5 3.5H32z" fill="#1c2b45"/></g>
+          <circle cx="9" cy="21" r="3.2" fill="#1c2b45" stroke="#fff" stroke-width="1.6"/>
+          <circle cx="37" cy="21" r="3.2" fill="#1c2b45" stroke="#fff" stroke-width="1.6"/>
+        </svg>
+      </div>
     </div>
-    <div class="version-badge" id="login-version-badge"></div>
+
+    <!-- Derecha: panel blanco con el formulario -->
+    <div class="login-panel">
+      <div class="login-form">
+        <h1 class="login-entra" style="animation-delay:.35s">Iniciar sesión</h1>
+        <p class="sub login-entra" style="animation-delay:.45s">Entra con tu usuario de Gestión Salidas</p>
+
+        <label class="login-label" for="login-usuario">Usuario</label>
+        <div class="campo-pass">
+          <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <!-- Sin autorrelleno: el navegador no debe proponer usuarios guardados. -->
+          <input type="text" id="login-usuario" name="salidas-u" placeholder="Usuario" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" readonly data-lpignore="true" data-1p-ignore data-form-type="other" autofocus>
+        </div>
+        <label class="login-label" for="login-pass">Contraseña</label>
+        <div class="campo-pass">
+          <svg class="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <!-- Campo de TEXTO que se ve con puntos (por CSS), no type="password":
+               así el navegador no lo trata como contraseña y no avisa de
+               "contraseña no segura / hay que cambiarla" ni ofrece guardarla. -->
+          <input type="text" id="login-pass" name="salidas-c" class="campo-oculto" placeholder="Contraseña" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" readonly data-lpignore="true" data-1p-ignore data-form-type="other">
+          <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+
+        <button class="btn-primary" id="btn-login" onclick="intentarLogin()">
+          <span class="spinner" id="login-spinner"></span>
+          <span id="login-btn-text">Entrar</span>
+          <svg class="login-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <p id="login-error">Usuario o contraseña incorrectos</p>
+      </div>
+      <div class="login-pie">
+        <span>© Primor · Departamento de Transporte</span>
+        <div class="version-badge" id="login-version-badge"></div>
+      </div>
+    </div>
   </div>
 
   <!-- APP -->
@@ -128,6 +203,115 @@
 
   <div id="toast"></div>
 
+<!-- Modal de actualización disponible (no se cierra clicando fuera: la actualización no es opcional) -->
+<div class="actualizacion-overlay" id="actualizacionModalOverlay">
+  <div class="actualizacion-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="actualizacionModalTitulo">
+    <!-- Escena animada: un perro pasea por la calle llevando la nueva versión.
+         Todo es SVG/CSS propio (sin imágenes externas). La velocidad la marca
+         la variable --vel (1 = paseo, más alto = corre al actualizar). -->
+    <div class="act-escena" id="actEscena" aria-hidden="true">
+      <div class="act-sol"></div>
+      <div class="act-tira act-nubes">
+        <svg viewBox="0 0 440 40" height="40"><g fill="#fff" opacity=".85"><ellipse cx="60" cy="22" rx="28" ry="10"/><ellipse cx="78" cy="16" rx="18" ry="10"/><ellipse cx="250" cy="26" rx="22" ry="8"/><ellipse cx="264" cy="21" rx="14" ry="8"/><ellipse cx="380" cy="14" rx="20" ry="7"/></g></svg>
+        <svg viewBox="0 0 440 40" height="40"><g fill="#fff" opacity=".85"><ellipse cx="60" cy="22" rx="28" ry="10"/><ellipse cx="78" cy="16" rx="18" ry="10"/><ellipse cx="250" cy="26" rx="22" ry="8"/><ellipse cx="264" cy="21" rx="14" ry="8"/><ellipse cx="380" cy="14" rx="20" ry="7"/></g></svg>
+      </div>
+      <div class="act-tira act-ciudad">
+        <svg viewBox="0 0 440 70" height="70" preserveAspectRatio="none"><g fill="#F3C9A6"><rect x="0" y="30" width="36" height="40"/><rect x="40" y="12" width="28" height="58"/><rect x="72" y="38" width="40" height="32"/><rect x="120" y="22" width="30" height="48"/><rect x="154" y="44" width="46" height="26"/><rect x="206" y="8" width="24" height="62"/><rect x="234" y="34" width="38" height="36"/><rect x="278" y="20" width="32" height="50"/><rect x="314" y="40" width="44" height="30"/><rect x="362" y="16" width="26" height="54"/><rect x="392" y="32" width="48" height="38"/></g></svg>
+        <svg viewBox="0 0 440 70" height="70" preserveAspectRatio="none"><g fill="#F3C9A6"><rect x="0" y="30" width="36" height="40"/><rect x="40" y="12" width="28" height="58"/><rect x="72" y="38" width="40" height="32"/><rect x="120" y="22" width="30" height="48"/><rect x="154" y="44" width="46" height="26"/><rect x="206" y="8" width="24" height="62"/><rect x="234" y="34" width="38" height="36"/><rect x="278" y="20" width="32" height="50"/><rect x="314" y="40" width="44" height="30"/><rect x="362" y="16" width="26" height="54"/><rect x="392" y="32" width="48" height="38"/></g></svg>
+      </div>
+      <div class="act-tira act-arboles">
+        <svg viewBox="0 0 440 60" height="60"><g fill="#7DB86A"><circle cx="40" cy="22" r="16"/><circle cx="54" cy="28" r="12"/><circle cx="210" cy="24" r="14"/><circle cx="350" cy="20" r="17"/><circle cx="366" cy="28" r="11"/></g><g fill="#6B4A2E"><rect x="44" y="34" width="5" height="26"/><rect x="208" y="34" width="5" height="26"/><rect x="354" y="34" width="5" height="26"/></g><g fill="#5B6572"><rect x="128" y="10" width="3" height="50"/><rect x="128" y="8" width="16" height="3" rx="1.5"/><rect x="278" y="10" width="3" height="50"/><rect x="278" y="8" width="16" height="3" rx="1.5"/></g><g fill="#FFC46B"><circle cx="142" cy="13" r="3"/><circle cx="292" cy="13" r="3"/></g></svg>
+        <svg viewBox="0 0 440 60" height="60"><g fill="#7DB86A"><circle cx="40" cy="22" r="16"/><circle cx="54" cy="28" r="12"/><circle cx="210" cy="24" r="14"/><circle cx="350" cy="20" r="17"/><circle cx="366" cy="28" r="11"/></g><g fill="#6B4A2E"><rect x="44" y="34" width="5" height="26"/><rect x="208" y="34" width="5" height="26"/><rect x="354" y="34" width="5" height="26"/></g><g fill="#5B6572"><rect x="128" y="10" width="3" height="50"/><rect x="128" y="8" width="16" height="3" rx="1.5"/><rect x="278" y="10" width="3" height="50"/><rect x="278" y="8" width="16" height="3" rx="1.5"/></g><g fill="#FFC46B"><circle cx="142" cy="13" r="3"/><circle cx="292" cy="13" r="3"/></g></svg>
+      </div>
+      <div class="act-suelo"></div>
+      <svg class="act-perro" viewBox="0 0 150 90">
+        <ellipse class="act-sombra" cx="70" cy="86" rx="46" ry="4" fill="#000"/>
+        <g class="act-cuerpo">
+          <rect class="act-pata act-b" x="34" y="50" width="9" height="32" rx="4.5" fill="#A8703C"/>
+          <rect class="act-pata act-a" x="84" y="50" width="9" height="32" rx="4.5" fill="#A8703C"/>
+          <path class="act-cola" d="M18 44 C 8 38, 6 26, 12 18" stroke="#C98B4F" stroke-width="7" stroke-linecap="round" fill="none"/>
+          <rect x="16" y="34" width="86" height="30" rx="15" fill="#C98B4F"/>
+          <ellipse cx="62" cy="58" rx="30" ry="6" fill="#E8B985"/>
+          <rect class="act-pata act-a" x="24" y="50" width="9" height="33" rx="4.5" fill="#C98B4F"/>
+          <rect class="act-pata act-b" x="92" y="50" width="9" height="33" rx="4.5" fill="#C98B4F"/>
+          <rect x="96" y="34" width="8" height="22" rx="3" fill="#D98C2B"/>
+          <circle cx="102" cy="58" r="3.5" fill="#FFC46B"/>
+          <circle cx="114" cy="30" r="16" fill="#C98B4F"/>
+          <ellipse cx="130" cy="36" rx="12" ry="8.5" fill="#E8B985"/>
+          <circle cx="140" cy="33" r="3.6" fill="#2B1B10"/>
+          <circle cx="117" cy="25" r="2.6" fill="#2B1B10"/>
+          <circle cx="118" cy="24.2" r=".9" fill="#fff"/>
+          <path d="M128 42 q4 3 8 0" stroke="#2B1B10" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <path class="act-oreja" d="M104 16 C 96 18, 96 34, 102 40 C 108 36, 110 24, 108 16 Z" fill="#8A5A2B"/>
+        </g>
+      </svg>
+      <div class="act-chapa" id="actChapaVersion">Nueva versión</div>
+    </div>
+
+    <div class="act-contenido">
+      <div class="act-versiones" id="actVersiones" hidden>
+        <span class="act-v" id="actVersionActual"></span><span class="act-flecha">→</span><span class="act-v act-nueva" id="actVersionNueva"></span>
+      </div>
+      <h3 class="act-titulo" id="actualizacionModalTitulo">¡Nueva versión en camino!</h3>
+      <p class="act-mensaje" id="actualizacionModalMensaje">Hay una nueva versión de Gestión Salidas disponible. Es necesario actualizar para seguir usando la app.</p>
+      <div class="act-pie">
+        <button type="button" class="act-boton" id="btnActualizarAhora">🔄 Actualizar ahora</button>
+      </div>
+      <div class="act-barra"><i></i></div>
+    </div>
+  </div>
+</div>
+
+<!-- Ventana "Acerca de" (al pulsar el logo del login o de la cabecera) — js/acerca-de.js -->
+<div class="acerca-de-overlay" id="acercaDeModalOverlay">
+  <div class="acerca-de-box" role="dialog" aria-modal="true" aria-labelledby="acercaDeNombre">
+    <button type="button" class="acerca-cerrar-x" id="btnAcercaDeCerrar" aria-label="Cerrar">✕</button>
+    <div class="acerca-cabecera">
+      <div class="acerca-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#f3f4f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/>
+          <circle cx="7.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
+          <circle cx="17.5" cy="18" r="1.6" fill="#f3f4f6" stroke="none"/>
+        </svg>
+      </div>
+      <div class="acerca-nombre" id="acercaDeNombre">GESTIÓN <span>SALIDAS</span></div>
+      <div class="acerca-version" id="acercaDeVersion"></div>
+    </div>
+    <div class="acerca-tabs" role="tablist">
+      <button type="button" class="acerca-tab activa" id="acercaTabLicencia" role="tab" aria-selected="true" aria-controls="acercaPanelLicencia">Licencia</button>
+      <button type="button" class="acerca-tab" id="acercaTabNovedades" role="tab" aria-selected="false" aria-controls="acercaPanelNovedades">Novedades</button>
+    </div>
+    <div class="acerca-panel" id="acercaPanelLicencia" role="tabpanel">
+    <div class="acerca-cuerpo">
+      <div class="acerca-campo">
+        <span class="lbl">Desarrollado por</span>
+        <span class="val" id="acercaDeAutor"></span>
+      </div>
+      <div class="acerca-campo">
+        <span class="lbl">Licencia de uso concedida a</span>
+        <span class="val" id="acercaDeLicenciatario"></span>
+      </div>
+      <div class="acerca-campo">
+        <span class="lbl">Nº de activación</span>
+        <span class="acerca-clave" id="acercaDeActivacion"></span>
+        <span class="acerca-activado">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+          Producto activado
+        </span>
+      </div>
+    </div>
+    <div class="acerca-legal">
+      <p class="acerca-copy" id="acercaDeCopy"></p>
+      <p>Este software está protegido por la legislación sobre propiedad intelectual. La licencia de uso concedida es no exclusiva e intransferible y se limita a la actividad interna del licenciatario.</p>
+      <p>Queda prohibida su copia, cesión, distribución, modificación o ingeniería inversa, total o parcial, sin autorización previa y por escrito del autor. Cualquier uso no autorizado podrá dar lugar a las acciones legales correspondientes.</p>
+    </div>
+    </div>
+    <div class="acerca-panel" id="acercaPanelNovedades" role="tabpanel" hidden>
+      <div class="acerca-novedades" id="acercaDeNovedades"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ORDEN DE CARGA (importa). Son scripts normales (no módulos): comparten ámbito global y se ejecutan de
      arriba abajo. Cada archivo puede usar, EN EL MOMENTO DE CARGAR, solo lo definido en los anteriores
      (dentro de funciones sí puede usar lo de cualquier archivo, porque se ejecutan más tarde).
@@ -146,6 +330,7 @@
 <script src="js/utilidades.js"></script>
 <script src="js/usuarios.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/login-estaciones.js"></script>
 <script src="js/navegacion-cabecera.js"></script>
 <script src="js/fechas.js"></script>
 <script src="js/navegacion.js"></script>
@@ -162,6 +347,7 @@
 <script src="js/conteos-panel.js"></script>
 <script src="js/avisos-verificacion.js"></script>
 <script src="js/conteos-pdf.js"></script>
+<script src="js/conteos-excel.js"></script>
 <script src="js/conteos-badges.js"></script>
 <script src="js/conteos-impresion.js"></script>
 <script src="js/conteos-filas.js"></script>
@@ -169,5 +355,7 @@
 <script src="js/gestor-observaciones.js"></script>
 <script src="js/ui-modal.js"></script>
 <script src="js/actualizaciones.js"></script>
+<script src="js/changelog.js"></script>
+<script src="js/acerca-de.js"></script>
 </body>
 </html>

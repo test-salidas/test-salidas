@@ -27,6 +27,7 @@ const CATALOGO_PERMISOS = [
     grupo: 'Gestión general',
     items: [
       { clave: 'notas', etiqueta: 'Notas y observaciones', desc: 'Añadir y quitar notas en la cuadrícula de conteos diarios.' },
+      { clave: 'forzar_palets', etiqueta: 'Forzar palets (casillas "NO")', desc: 'Poner un número de palets en una casilla que trae "NO" (tienda que no debería recibir palets de esa nave). Sin este permiso, al tocar el "NO" sale el aviso de que no está permitido.' },
       { clave: 'cierres', etiqueta: 'Bloquear y desbloquear conteos', desc: 'Bloquear el conteo de una tienda (con una observación) o desbloquearlo en la cuadrícula de conteos.' },
       { clave: 'ver_cuadrante_completo', etiqueta: 'Ver cuadrante completo', desc: 'Ver los conteos de fechas lejanas (más allá de hoy + 1 día) con todos los datos, igual que un administrador, en vez de la versión reducida (solo tiendas y bloqueos, sin límites, celdas de conteo ni plazos de entrega).' },
     ],
@@ -297,7 +298,7 @@ function abrirModalUsuario_(usuarioExistente) {
         (esNuevo
           ? '<div class="modal-campo">' +
               '<label for="modal-usuario-password">Contraseña</label>' +
-              '<input type="password" id="modal-usuario-password" placeholder="Mínimo 3 caracteres" autocomplete="new-password">' +
+              '<input type="text" id="modal-usuario-password" class="campo-oculto" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="Mínimo 3 caracteres">' +
             '</div>'
           : '') +
         '<div class="modal-campo">' +
@@ -388,6 +389,9 @@ function abrirModalUsuario_(usuarioExistente) {
       const inputPassword = document.getElementById('modal-usuario-password');
       const password = inputPassword.value;
       if (!password || password.length < 3) { inputPassword.focus(); return; }
+      if (String(password).trim().toLowerCase() === String(usuario || '').trim().toLowerCase()) {
+        mostrarToast('La contraseña no puede ser igual que el usuario', true); inputPassword.focus(); return;
+      }
       const btn = document.getElementById('modal-confirm-btn');
       btn.disabled = true;
       llamarApi_('crearUsuario', [usuario, nombreCompleto, password, rol, permisos])
@@ -438,7 +442,7 @@ function abrirModalPasswordUsuario_(usuarioExistente) {
   custom.innerHTML =
     '<div class="modal-campo">' +
       '<label for="modal-usuario-password-nueva">Contraseña nueva</label>' +
-      '<input type="password" id="modal-usuario-password-nueva" placeholder="Mínimo 3 caracteres" autocomplete="new-password">' +
+      '<input type="text" id="modal-usuario-password-nueva" class="campo-oculto" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="Mínimo 3 caracteres">' +
     '</div>';
 
   const actions = document.getElementById('modal-actions');
@@ -451,6 +455,9 @@ function abrirModalPasswordUsuario_(usuarioExistente) {
     const input = document.getElementById('modal-usuario-password-nueva');
     const password = input.value;
     if (!password || password.length < 3) { input.focus(); return; }
+    if (String(password).trim().toLowerCase() === String(usuarioExistente.usuario || '').trim().toLowerCase()) {
+      mostrarToast('La contraseña no puede ser igual que el usuario', true); input.focus(); return;
+    }
     const btn = document.getElementById('modal-confirm-btn');
     btn.disabled = true;
     llamarApi_('cambiarPasswordUsuario', [usuarioExistente.id, password])
@@ -521,15 +528,15 @@ function abrirModalMiUsuario_() {
     '<hr class="mi-usuario-separador">' +
     '<div class="modal-campo">' +
       '<label for="mi-usuario-password-actual">Contraseña actual</label>' +
-      '<input type="password" id="mi-usuario-password-actual" autocomplete="current-password">' +
+      '<input type="text" id="mi-usuario-password-actual" class="campo-oculto" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other">' +
     '</div>' +
     '<div class="modal-campo">' +
       '<label for="mi-usuario-password-nueva">Contraseña nueva</label>' +
-      '<input type="password" id="mi-usuario-password-nueva" placeholder="Mínimo 3 caracteres" autocomplete="new-password">' +
+      '<input type="text" id="mi-usuario-password-nueva" class="campo-oculto" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="Mínimo 3 caracteres">' +
     '</div>' +
     '<div class="modal-campo">' +
       '<label for="mi-usuario-password-repetir">Repetir contraseña nueva</label>' +
-      '<input type="password" id="mi-usuario-password-repetir" autocomplete="new-password">' +
+      '<input type="text" id="mi-usuario-password-repetir" class="campo-oculto" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other">' +
     '</div>';
 
   const actions = document.getElementById('modal-actions');
@@ -545,6 +552,9 @@ function abrirModalMiUsuario_() {
 
     if (!inputActual.value) { mostrarToast('Escribe tu contraseña actual', true); inputActual.focus(); return; }
     if (!inputNueva.value || inputNueva.value.length < 3) { mostrarToast('La contraseña nueva debe tener al menos 3 caracteres', true); inputNueva.focus(); return; }
+    if (inputNueva.value.trim().toLowerCase() === String(SESSION_USUARIO || '').trim().toLowerCase()) {
+      mostrarToast('La contraseña no puede ser igual que el usuario', true); inputNueva.focus(); return;
+    }
     if (inputRepetir.value !== inputNueva.value) { mostrarToast('Las dos contraseñas nuevas no coinciden', true); inputRepetir.focus(); return; }
 
     const btn = document.getElementById('modal-confirm-btn');

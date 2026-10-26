@@ -4,7 +4,7 @@
 function cargarConteoDia() {
   const cont = document.getElementById('dia-contenido');
   cont.innerHTML = '<div class="loader"><span class="spinner-navy"></span><div>Cargando conteo…</div></div>';
-  document.getElementById('resumen-body').innerHTML = '<div class="resumen-vacio">Cargando…</div>';
+  document.getElementById('resumen-body').innerHTML = '<div class="resumen-vacio cargando-linea"><span class="spinner-mini"></span>Cargando…</div>';
   // Se devuelve la promesa para que quien necesite hacer algo justo
   // después de que el contenido ya esté pintado (p.ej. irAAgrupacionDesdeInicio_,
   // que hace scroll hasta una agrupación concreta) pueda encadenarse con
@@ -33,12 +33,17 @@ function cargarConteoDia() {
  *   toca el DOM para no perder el scroll ni el estado colapsado/expandido.
  * - Nunca se mueve el scroll ni se muestra ningún loader/spinner: es un
  *   refresco silencioso, no una recarga.
- * - Se pausa solo cuando la pestaña está en segundo plano o cuando se
- *   sale de la pantalla de conteos, y se reanuda al volver.
+ * - Se pausa solo cuando la ventana está oculta (minimizada, en otra
+ *   pestaña o con otra app a pantalla completa encima) o cuando se sale de
+ *   la pantalla de conteos, para no gastar peticiones ni cuota de logs de
+ *   Supabase. Al volver a la ventana se refresca al momento y se reinicia
+ *   la cuenta atrás, igual que en GIDT.
+ * - Cada sondeo son 3 llamadas a Supabase (conteo, verificaciones y
+ *   cambios tras verificar), por eso el intervalo es de 15 s y no menos.
  */
 let CONTEO_REFRESCO_INTERVALO_ = null;
 let CONTEO_REFRESCO_EN_VUELO_ = false;
-const CONTEO_REFRESCO_MS_ = 5000;
+const CONTEO_REFRESCO_MS_ = 30000;
 
 // Temporizador visual (topbar, junto al reloj): puramente decorativo, no
 // afecta en nada a cuándo se sondea de verdad — solo pinta la cuenta atrás
@@ -63,6 +68,15 @@ function iniciarAutorefrescoConteoDia_() {
   }, CONTEO_REFRESCO_MS_);
   iniciarTicTacRefrescoConteo_();
 }
+
+// Al volver a la ventana tras tenerla oculta, refrescar al momento (para no
+// ver datos de hace rato) y reiniciar el ciclo para que el siguiente sondeo
+// sea dentro de 15 s y no se solape con este.
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden || ESTADO.vista !== 'conteos' || !CONTEO_REFRESCO_INTERVALO_) return;
+  iniciarAutorefrescoConteoDia_();
+  refrescarConteoDiaEnVivo_();
+});
 
 /** Arranca (si no estaba ya en marcha) el repintado cada segundo del
  *  numerito de cuenta atrás del topbar. Se para solo en cuanto se sale de
@@ -164,6 +178,17 @@ function renderContenidoDia(data) {
     const menuRapido = document.getElementById('menu-rapido-body');
     if (menuRapido) menuRapido.innerHTML = '<div class="menu-rapido-vacio">Fecha no disponible todavía.</div>';
     return;
+  }
+
+  // Conteo especial: esa fecha usa una plantilla propia de "Rutas y tiendas"
+  // en vez de la del día de la semana.
+  if (data.diaEspecial) {
+    const avisoEsp = document.createElement('div');
+    avisoEsp.className = 'aviso-conteo-especial';
+    avisoEsp.innerHTML =
+      '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>' +
+      '<span><b>Conteo especial.</b> Este día no usa la plantilla normal del ' + escapeHtml(DIAS_SEMANA_ES[new Date(data.fecha + 'T12:00:00').getDay()]) + ': las rutas y tiendas son las configuradas para esta fecha.</span>';
+    wrap.appendChild(avisoEsp);
   }
 
   if (!data.dia) {
@@ -272,7 +297,9 @@ function pintarMenuRapido_() {
   const secccionesFiltradas = !filtro ? secciones : secciones.filter(function (seccion) {
     const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
     if (normalizarBusquedaPlantilla_(titulo).indexOf(filtro) !== -1) return true;
-    return (seccion.tiendas || []).some(function (t) { return normalizarBusquedaPlantilla_(t.nombre).indexOf(filtro) !== -1; });
+    // Una tienda que ese día sale por otra agrupación (cambio puntual) solo
+    // cuenta en la agrupación por la que sale, no en la de siempre.
+    return (seccion.tiendas || []).some(function (t) { return !t.salePorExcepcion && normalizarBusquedaPlantilla_(t.nombre).indexOf(filtro) !== -1; });
   });
 
   if (!secccionesFiltradas.length) {

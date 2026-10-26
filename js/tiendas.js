@@ -233,7 +233,7 @@ function htmlSimulacionAvisoTiendasCard_() {
   return (
     '<div class="vista-card" id="barrido-tiendas-card" style="margin-bottom:16px;">' +
       '<div class="vista-card-header"><h2>Simulación envío tiendas</h2></div>' +
-      '<p>Envía a cada tienda un correo (texto simple) con los palets que va a recibir, calculando la fecha de entrega según su plazo (24H / 48H / 72H, detectado por el nombre de la tienda). Solo se avisa a las tiendas con palets asignados, no cerradas y con el conteo ya puesto (algún dato guardado en su fila, se haya enviado o no la previsión/definitivo a la agencia), con email configurado en Configuración tiendas. La vista previa de abajo se calcula sola al entrar aquí (y al cambiar de fecha), sin necesidad de pulsar nada. Los envíos reales (manuales o automáticos, ver Configuración hora aviso tiendas) no se mandan al instante: se encolan y se van enviando solos a un ritmo máximo de 30/min (ver Cola de avisos a tiendas).</p>' +
+      '<p>Envía a cada tienda un correo (texto simple) con los palets que va a recibir, calculando la fecha de entrega según su plazo (24H / 48H / 72H, detectado por el nombre de la tienda). Solo se avisa a las tiendas con palets asignados, sin el conteo bloqueado y con el conteo ya puesto (algún dato guardado en su fila, se haya enviado o no la previsión/definitivo a la agencia), con email configurado en Configuración tiendas. La vista previa de abajo se calcula sola al entrar aquí (y al cambiar de fecha), sin necesidad de pulsar nada. Los envíos reales (manuales o automáticos, ver Configuración hora aviso tiendas) no se mandan al instante: se encolan y se van enviando solos a un ritmo máximo de 30/min (ver Cola de avisos a tiendas).</p>' +
       '<div class="admin-filtros">' +
         '<div class="admin-filtro-campo"><label>Fecha del conteo</label><input type="date" id="barrido-fecha" value="' + BARRIDO_TIENDAS_ESTADO.fecha + '"></div>' +
         '<button type="button" class="btn-admin-buscar" id="btn-barrido-preview">Vista previa</button>' +
@@ -337,7 +337,7 @@ function pintarResultadoBarridoTiendas_() {
         '<div class="barrido-chip">' + (r.pendientesDeOtrasRutas ? r.pendientesDeOtrasRutas.length : 0) + ' sin conteo guardado</div>' +
         '<div class="barrido-chip">' + r.sinEmail.length + ' sin email</div>' +
         '<div class="barrido-chip">' + r.sinPalets.length + ' sin palets</div>' +
-        '<div class="barrido-chip">' + r.cerradas.length + ' cerradas</div>' +
+        '<div class="barrido-chip">' + r.cerradas.length + ' bloqueadas</div>' +
         (r.errores.length ? '<div class="barrido-chip error">' + r.errores.length + ' con error</div>' : '') +
       '</div>' +
       listaColapsable(BARRIDO_TIENDAS_ESTADO.simulado ? 'Se enviarían' : 'Encolados (se enviarán a 30/min)', r.enviados, function (it) {
@@ -349,7 +349,7 @@ function pintarResultadoBarridoTiendas_() {
       listaColapsable('Sin conteo guardado', r.pendientesDeOtrasRutas || [], function (t) { return '<li>' + escapeHtml(t) + '</li>'; }) +
       listaColapsable('Sin email configurado', r.sinEmail, function (t) { return '<li>' + escapeHtml(t) + '</li>'; }) +
       listaColapsable('Sin palets ese día', r.sinPalets, function (t) { return '<li>' + escapeHtml(t) + '</li>'; }) +
-      listaColapsable('Cerradas ese día', r.cerradas, function (t) { return '<li>' + escapeHtml(t) + '</li>'; }) +
+      listaColapsable('Con el conteo bloqueado ese día', r.cerradas, function (t) { return '<li>' + escapeHtml(t) + '</li>'; }) +
       listaColapsable('Errores de envío', r.errores, function (it) { return '<li>' + escapeHtml(it.tienda) + ' — ' + escapeHtml(it.error) + '</li>'; });
 
     ajustarAlturaListaScrollable_('barrido-resultado');
@@ -429,25 +429,24 @@ function renderConfigTiendas() {
         '<div class="vista-card-header">' +
           '<h2>Configuración tiendas <span class="tiendas-config-total" id="tiendas-config-total"></span><span class="tiendas-config-total nueva-toggle" id="tiendas-config-nueva" title="Mostrar solo las tiendas nuevas (falta email)"></span><span class="tiendas-config-total sinuso-toggle" id="tiendas-config-sinuso" title="Mostrar solo las tiendas sin uso"></span><span class="tiendas-config-total sinemail-toggle" id="tiendas-config-sinemail" title="Mostrar solo las tiendas sin ningún email configurado"></span></h2>' +
           '<div class="vista-card-header-acciones">' +
-            (tienePermiso('tiendas') ?
-              '<button type="button" class="btn-sincronizar-agrupaciones" id="btn-nueva-tienda-config" title="Da de alta una tienda nueva (número, nombre, email, tránsito y límite de palets)">' +
-                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>' +
-                'Nueva tienda</button>' : '') +
             '<button type="button" class="btn-sincronizar-agrupaciones" id="btn-exportar-pdf-tiendas" title="Exporta la lista visible (respeta el buscador y los filtros) a PDF">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>' +
               'PDF</button>' +
             '<button type="button" class="btn-sincronizar-agrupaciones" id="btn-exportar-excel-tiendas" title="Exporta la lista visible (respeta el buscador y los filtros) a Excel (CSV)">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>' +
               'Excel</button>' +
-            '<button type="button" class="btn-sincronizar-agrupaciones" id="btn-duplicados-tiendas" title="Compara los nombres de todas las tiendas para detectar la misma tienda escrita de forma distinta algún día">' +
-              '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>' +
-              'Buscar posibles duplicados</button>' +
             '<button type="button" class="btn-sincronizar-agrupaciones" id="btn-sincronizar-tiendas" title="Vuelve a recorrer todas las hojas de día y añade las tiendas nuevas / marca las que ya no se usan">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 22v-6h6M3.5 9a9 9 0 0 1 15-4L21 8M20.5 15a9 9 0 0 1-15 4L3 16"/></svg>' +
               'Buscar y sincronizar cambios de tiendas</button>' +
           '</div>' +
         '</div>' +
         '<p>Email de cada tienda, usado para avisarle por correo de los palets que va a recibir cuando se hace el barrido del día. Marca con L M X J V S D los días de la semana en que cada tienda recibe entrega, para que la fecha prevista del aviso sea correcta.</p>' +
+        // Número, nombre, límite y tránsito llegan solos desde GIDT (ver
+        // gidt_aplicar_tienda en el backend): aquí solo se ven.
+        '<div class="tiendas-aviso-gidt">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 22v-6h6M3.5 9a9 9 0 0 1 15-4L21 8M20.5 15a9 9 0 0 1-15 4L3 16"/></svg>' +
+          '<span>El <b>nombre</b>, el <b>límite de palets</b> y el <b>tránsito</b> de cada tienda vienen de <b>GIDT</b> y se actualizan solos: cámbialos allí. Las altas y bajas de tiendas también se hacen en GIDT. Aquí se editan el email, las notas y los días de entrega.</span>' +
+        '</div>' +
         (tienePermiso('tiendas') ? '' :
           '<div class="emails-config-solo-lectura">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>' +
@@ -460,13 +459,12 @@ function renderConfigTiendas() {
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div id="tiendas-config-lista"><div class="loader">Cargando…</div></div>' +
+      '<div id="tiendas-config-lista"><div class="loader"><span class="spinner-navy"></span><div>Cargando…</div></div></div>' +
     '</div>';
 
   const btnNuevaTienda = document.getElementById('btn-nueva-tienda-config');
   if (btnNuevaTienda) btnNuevaTienda.onclick = abrirModalNuevaTiendaConfig_;
   document.getElementById('btn-sincronizar-tiendas').onclick = sincronizarTiendasDesdeApp_;
-  document.getElementById('btn-duplicados-tiendas').onclick = buscarDuplicadosTiendas_;
   document.getElementById('btn-exportar-pdf-tiendas').onclick = exportarTiendasConfigPDF_;
   document.getElementById('btn-exportar-excel-tiendas').onclick = exportarTiendasConfigExcel_;
 
@@ -653,8 +651,8 @@ function obtenerTiendasConfigFiltradas_() {
 /** Texto legible ("48h (2d)") para el valor numérico (1-5) de tránsito,
  *  reutilizando las mismas etiquetas que el desplegable de la lista. */
 function transitoTextoTienda_(valor) {
-  const op = TRANSITO_OPCIONES.filter(function (o) { return o.valor === Number(valor || 1); })[0];
-  return op ? op.texto : TRANSITO_OPCIONES[0].texto;
+  const d = Number(valor || 1);
+  return (d * 24) + 'h (' + d + 'd)';
 }
 
 function pintarListaTiendas_() {
@@ -732,16 +730,10 @@ function pintarListaTiendas_() {
         '<div class="emails-config-cabecera">' +
           '<span class="emails-config-nombre-wrap">' +
             '<span class="emails-config-nombre">' + escapeHtml(it.tienda) + '</span>' +
-            (tienePermiso('tiendas') ?
-              '<button type="button" class="emails-config-renombrar" title="Cambiar el nombre de esta tienda" data-renombrar="' + escapeAttr(it.tienda) + '">' +
-                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
-              '</button>' : '') +
           '</span>' +
           '<span class="emails-config-acciones-derecha">' +
             badge +
-            '<button type="button" class="emails-config-borrar" title="' + (esSinUso ? 'Eliminar de la configuración' : 'No se puede eliminar: esta tienda está activa en el cuadrante de algún día') + '" data-borrar="' + escapeAttr(it.tienda) + '" ' + (esSinUso ? '' : 'disabled') + '>' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>' +
-            '</button>' +
+            // Sin papelera: las bajas de tiendas se hacen en GIDT y llegan solas.
           '</span>' +
         '</div>' +
         filaDias +
@@ -756,16 +748,12 @@ function pintarListaTiendas_() {
           '</div>' +
           '<div class="emails-config-campo-fila">' +
             '<div class="emails-config-campo emails-config-campo-estrecho">' +
-              '<label>Tránsito</label>' +
-              '<select class="emails-config-transito" data-transito-tienda="' + escapeAttr(it.tienda) + '" ' + (tienePermiso('tiendas') ? '' : 'disabled') + '>' +
-                TRANSITO_OPCIONES.map(function (op) {
-                  return '<option value="' + op.valor + '"' + (Number(it.transito || 1) === op.valor ? ' selected' : '') + '>' + op.texto + '</option>';
-                }).join('') +
-              '</select>' +
+              '<label>Tránsito <span class="emails-config-gidt-etiqueta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Solo lectura · GIDT</span></label>' +
+              '<input type="text" class="emails-config-gidt" value="' + escapeAttr(transitoTextoTienda_(it.transito)) + '" readonly tabindex="-1" aria-readonly="true" title="Solo lectura: viene de GIDT. Cámbialo allí.">' +
             '</div>' +
             '<div class="emails-config-campo emails-config-campo-estrecho">' +
-              '<label>Límite palets</label>' +
-              '<input type="text" inputmode="numeric" id="' + idSeguro + '_limite" value="' + escapeAttr(it.limite != null ? it.limite : '') + '" placeholder="Sin límite" ' + (tienePermiso('tiendas') ? '' : 'disabled') + '>' +
+              '<label>Límite palets <span class="emails-config-gidt-etiqueta"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Solo lectura · GIDT</span></label>' +
+              '<input type="text" class="emails-config-gidt" value="' + escapeAttr(it.limite != null ? String(Number(it.limite)) : 'Sin límite') + '" readonly tabindex="-1" aria-readonly="true" title="Solo lectura: viene de GIDT. Cámbialo allí.">' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -810,7 +798,9 @@ var TRANSITO_OPCIONES = [
   { valor: 2, texto: '48h (2d)' },
   { valor: 3, texto: '72h (3d)' },
   { valor: 4, texto: '96h (4d)' },
-  { valor: 5, texto: '120h (5d)' }
+  { valor: 5, texto: '120h (5d)' },
+  { valor: 6, texto: '144h (6d)' },
+  { valor: 7, texto: '168h (7d)' }
 ];
 
 function guardarTransitoTienda_(tienda, sel) {
@@ -845,23 +835,14 @@ function toggleDiaEntregaTienda_(tienda, dia, btn) {
 function guardarEmailTienda_(tienda, idSeguro, btn) {
   const email = document.getElementById(idSeguro + '_email').value;
   const notas = document.getElementById(idSeguro + '_notas').value;
-  const limiteEl = document.getElementById(idSeguro + '_limite');
-  const limite = limiteEl ? limiteEl.value.trim() : '';
-  if (limite !== '' && isNaN(Number(limite))) {
-    limiteEl.focus();
-    mostrarToast('El límite de palets debe ser un número', true);
-    return;
-  }
   btn.disabled = true;
   // Email/notas y límite viven en dos columnas de config_tiendas pero se
   // guardan juntos al pulsar "Guardar", igual que antes se guardaban solo
   // email/notas -- el límite es un número libre (no un desplegable como el
   // tránsito), así que tiene más sentido guardarlo al confirmar que en
   // cada pulsación de tecla.
-  Promise.all([
-    llamarApi_('guardarEmailTienda', [tienda, email, notas]),
-    llamarApi_('guardarLimiteTienda', [tienda, limite])
-  ])
+  // El límite ya no se guarda aquí: viene de GIDT.
+  llamarApi_('guardarEmailTienda', [tienda, email, notas])
     .then(function () {
       mostrarToast('Guardado');
       cargarTiendasConfig_();
@@ -1136,56 +1117,4 @@ function sincronizarTiendasDesdeApp_() {
       if (btn) { btn.classList.remove('girando'); btn.disabled = false; }
       mostrarErrorServidor(err);
     });
-}
-
-/** Compara por similitud de texto todas las claves de tiendas y muestra
- * en un modal las que se parecen mucho entre sí, para detectar la misma
- * tienda escrita de forma distinta algún día (espacios, guiones,
- * tildes...). El backend (buscar_posibles_duplicados_tiendas, con
- * pg_trgm) hace la comparación; aquí solo se pinta el resultado. */
-function buscarDuplicadosTiendas_() {
-  const btn = document.getElementById('btn-duplicados-tiendas');
-  if (btn) { btn.classList.add('girando'); btn.disabled = true; }
-  llamarApi_('buscarPosiblesDuplicadosTiendas', [])
-    .then(function (pares) {
-      if (btn) { btn.classList.remove('girando'); btn.disabled = false; }
-      mostrarModalDuplicadosTiendas_(pares || []);
-    })
-    .catch(function (err) {
-      if (btn) { btn.classList.remove('girando'); btn.disabled = false; }
-      mostrarErrorServidor(err);
-    });
-}
-
-function mostrarModalDuplicadosTiendas_(pares) {
-  document.getElementById('modal-box').classList.add('medio');
-  document.getElementById('modal-box').classList.remove('ancho');
-  document.getElementById('modal-box').classList.remove('usuario-form');
-  document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Posibles tiendas duplicadas';
-  document.getElementById('modal-text').style.display = 'none';
-  document.getElementById('modal-textarea').style.display = 'none';
-
-  const custom = document.getElementById('modal-custom');
-  custom.style.display = 'block';
-  custom.innerHTML = !pares.length
-    ? '<div class="modal-envio-ok">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' +
-        '<span>No se ha encontrado ningún nombre sospechosamente parecido.</span>' +
-      '</div>'
-    : '<p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Estos nombres se parecen mucho entre sí. Si son la misma tienda, corrige el nombre en "Rutas y tiendas" el día que esté distinto, para que quede igual todos los días.</p>' +
-      '<div style="display:flex;flex-direction:column;gap:8px;">' +
-        pares.map(function (p) {
-          return '<div style="border:1px solid var(--line);border-radius:9px;padding:9px 11px;">' +
-            '<div style="font-weight:700;font-size:13px;color:var(--navy);">' + escapeHtml(p.tienda1) + '</div>' +
-            '<div style="font-weight:700;font-size:13px;color:var(--navy);">' + escapeHtml(p.tienda2) + '</div>' +
-            '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">Coincidencia: ' + Math.round(p.similitud * 100) + '%</div>' +
-          '</div>';
-        }).join('') +
-      '</div>';
-
-  const actions = document.getElementById('modal-actions');
-  actions.innerHTML = '<button class="modal-confirm" id="modal-confirm-btn">Cerrar</button>';
-  document.getElementById('modal-overlay').style.display = 'flex';
-  document.getElementById('modal-confirm-btn').onclick = cerrarModal;
 }

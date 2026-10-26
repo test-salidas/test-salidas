@@ -46,13 +46,37 @@ function badgePrevision(seccion) {
  *    vivo de esa agrupación, sin ningún aviso/alerta de límite (es solo
  *    información visual).
  */
-function filaGrupoHeaderHtml(t, nombresGrupo, tienePeso, tieneCExpress, tieneSobrestock) {
+/**
+ * Junta las tiendas de cada grupo de palets: todas las del mismo grupo se
+ * colocan seguidas, en el sitio de la primera de ellas, para que en el
+ * conteo salga un solo bloque con una sola cabecera (y su contador) aunque
+ * en Rutas y tiendas no estén todas seguidas (p. ej. una tienda puntual
+ * colocada más abajo). El resto de tiendas no cambia de orden.
+ */
+function juntarGruposDePalets(tiendas) {
+  const porGrupo = {};
+  (tiendas || []).forEach(function (t) {
+    if (!t.notaGrupoId) return;
+    (porGrupo[t.notaGrupoId] = porGrupo[t.notaGrupoId] || []).push(t);
+  });
+  const puestos = {};
+  const res = [];
+  (tiendas || []).forEach(function (t) {
+    if (!t.notaGrupoId) { res.push(t); return; }
+    if (puestos[t.notaGrupoId]) return;
+    puestos[t.notaGrupoId] = true;
+    porGrupo[t.notaGrupoId].forEach(function (m) { res.push(m); });
+  });
+  return res;
+}
+
+function filaGrupoHeaderHtml(t, nombresGrupo, tienePeso, tieneCExpress, tieneSobrestock, tieneViernes, tieneDomingo) {
   const esTotal = t.notaGrupoTipo === 'total';
   const tiendas = (nombresGrupo || []).map(quitarCodigoTienda).join(' + ');
   const textoIzquierda = esTotal ? t.nota : tiendas;
   const chipInicial = esTotal ? '0 palets' : t.nota;
   return '<tr class="fila-grupo-header' + (esTotal ? ' fila-grupo-header-total' : '') + '" data-nota-grupo-header="' + escapeAttr(t.notaGrupoId) + '" data-nota-grupo-tipo="' + escapeAttr(t.notaGrupoTipo || '') + '">' +
-    '<td colspan="' + (8 + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '">' +
+    '<td colspan="' + (8 + (tieneViernes ? 1 : 0) + (tieneDomingo ? 1 : 0) + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '">' +
     '<div class="grupo-header">' +
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' +
     '<span class="grupo-header-tiendas">' + escapeHtml(textoIzquierda) + '</span>' +
@@ -89,5 +113,9 @@ var TRANSITO_BADGES = {
   5: { texto: '120H', clase: 'badge-120h' }
 };
 function badgeTransitoTienda(transito) {
-  return TRANSITO_BADGES[Number(transito)] || null;
+  const d = Number(transito);
+  if (TRANSITO_BADGES[d]) return TRANSITO_BADGES[d];
+  // Más de 5 días (p.ej. MADEIRA o AZORES, 144H desde GIDT): mismo estilo que 120H.
+  if (d > 5) return { texto: (d * 24) + 'H', clase: 'badge-120h' };
+  return null;
 }

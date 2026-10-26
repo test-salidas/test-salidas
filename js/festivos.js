@@ -23,7 +23,8 @@ let FESTIVOS_ESTADO = {
   filtroTipo: 'todos',   // 'todos' | 'cierre' | 'nota'
   filtroDesde: null,     // 'YYYY-MM-DD' -- si desde+hasta están definidos, sustituye la navegación semanal
   filtroHasta: null,
-  filtrosAbiertos: false  // si el panel de filtros (oculto tras un icono) está desplegado
+  filtrosAbiertos: false, // si el panel de filtros (oculto tras un icono) está desplegado
+  fechasEspeciales: {}    // { 'YYYY-MM-DD': true } de las fechas con conteo especial
 };
 
 /** Suma (o resta) días a una fecha 'YYYY-MM-DD' y devuelve otra fecha en el mismo formato. */
@@ -81,7 +82,7 @@ function renderAdminFestivos() {
     '<div class="vista-card">' +
       '<div class="festivos-fijo">' +
         '<div class="vista-card-header">' +
-          '<h2>Cierres y cambios</h2>' +
+          '<h2>Bloqueos y cambios</h2>' +
           '<div class="vista-card-header-acciones">' +
             '<button type="button" class="btn-festivos-filtro' + (FESTIVOS_ESTADO.filtrosAbiertos ? ' abierto' : '') + '" id="btn-festivos-filtro-toggle" title="Filtrar">' +
               '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>' +
@@ -89,10 +90,10 @@ function renderAdminFestivos() {
             '</button>' +
             '<button type="button" class="btn-anadir-obs" id="btn-festivos-anadir">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>' +
-              'Añadir cierre / observación</button>' +
+              'Añadir bloqueo / observación</button>' +
           '</div>' +
         '</div>' +
-        '<p>Resumen de todas las notas y cierres de tienda guardados, tanto pasados como futuros.</p>' +
+        '<p>Resumen de todas las notas, bloqueos de conteo y cambios puntuales guardados, tanto pasados como futuros.</p>' +
         '<div class="festivos-stats" id="festivos-stats"></div>' +
         '<div class="festivos-toolbar">' +
           '<button type="button" class="nav" id="festivos-prev" aria-label="Semana anterior">' +
@@ -114,7 +115,7 @@ function renderAdminFestivos() {
               '<div class="festivos-filtros-fila">' +
                 '<div class="festivos-filtro-tipo" id="festivos-filtro-tipo">' +
                   '<button type="button" class="activo" data-tipo="todos">Todos</button>' +
-                  '<button type="button" data-tipo="cierre">Cierres</button>' +
+                  '<button type="button" data-tipo="cierre">Bloqueos</button>' +
                   '<button type="button" data-tipo="nota">Observaciones</button>' +
                   '<button type="button" data-tipo="cambio">Cambios</button>' +
                 '</div>' +
@@ -131,7 +132,7 @@ function renderAdminFestivos() {
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div id="festivos-lista"><div class="loader">Cargando…</div></div>' +
+      '<div id="festivos-lista"><div class="loader"><span class="spinner-navy"></span><div>Cargando…</div></div></div>' +
     '</div>';
 
   document.getElementById('btn-festivos-anadir').onclick = abrirGestorObservaciones;
@@ -226,7 +227,7 @@ function cargarFestivos() {
   });
 
   const idSolicitud = ++FESTIVOS_ESTADO.idSolicitud;
-  listaEl.innerHTML = '<div class="loader">Cargando…</div>';
+  listaEl.innerHTML = '<div class="loader"><span class="spinner-navy"></span><div>Cargando…</div></div>';
   const statsElCarga = document.getElementById('festivos-stats');
   if (statsElCarga) statsElCarga.innerHTML = '';
 
@@ -240,6 +241,12 @@ function cargarFestivos() {
       const infoPorFecha = {};
       resultadosMeses.forEach(function (dias) {
         (dias || []).forEach(function (info) { infoPorFecha[info.fecha] = info; });
+      });
+      // Fechas con conteo especial: en su columna sale "Conteo especial"
+      // en vez del nombre del día de la semana.
+      FESTIVOS_ESTADO.fechasEspeciales = {};
+      Object.keys(infoPorFecha).forEach(function (f) {
+        if (infoPorFecha[f].diaEspecial) FESTIVOS_ESTADO.fechasEspeciales[f] = true;
       });
       const diasRango = diasDeRango_(inicio, fin);
       const fechasConContenido = diasRango.filter(function (fecha) {
@@ -279,7 +286,7 @@ function aplanarDatosFestivos_(datosDias) {
         lista.push({ fecha: data.fecha, tag: parsearNombreAgrupacion(seccion.nombre).titulo, tipo: n.tipo, texto: n.texto, id: n.id });
       });
       (seccion.tiendas || []).forEach(function (t) {
-        if (t.cerrada) lista.push({ fecha: data.fecha, tag: t.nombre, tipo: 'cierre', texto: t.motivoCierre || 'Tienda cerrada', id: t.cierreId });
+        if (t.cerrada) lista.push({ fecha: data.fecha, tag: t.nombre, tipo: 'cierre', texto: t.motivoCierre || 'CONTEO BLOQUEADO', id: t.cierreId });
       });
       (seccion.excepcionesSalida || []).forEach(function (e) {
         lista.push({ fecha: data.fecha, tag: parsearNombreAgrupacion(seccion.nombre).titulo, tipo: 'cambio', texto: e.texto, id: e.id });
@@ -348,7 +355,7 @@ function renderStatsFestivos_(statsEl, grupos) {
     '</div>' +
     '<div class="festivos-stat cierre">' +
       '<span class="icono">' + ICONO_CIERRE_ + '</span>' +
-      '<span class="txt"><span class="valor">' + totalCierres + '</span><span class="etiqueta">cierre' + (totalCierres === 1 ? '' : 's') + '</span></span>' +
+      '<span class="txt"><span class="valor">' + totalCierres + '</span><span class="etiqueta">bloqueo' + (totalCierres === 1 ? '' : 's') + '</span></span>' +
     '</div>' +
     '<div class="festivos-stat nota">' +
       '<span class="icono">' + ICONO_NOTA_ + '</span>' +
@@ -369,7 +376,7 @@ function renderListaFestivos_(listaEl, grupos, hayFiltrosDeContenido) {
         '</div>'
       : '<div class="festivos-vacio">' +
           '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
-          '<span>Sin cierres ni anotaciones guardados en este rango.</span>' +
+          '<span>Sin bloqueos ni anotaciones guardados en este rango.</span>' +
         '</div>';
     return;
   }
@@ -380,6 +387,7 @@ function renderListaFestivos_(listaEl, grupos, hayFiltrosDeContenido) {
 
   grupos.forEach(function (g) {
     const esHoy = g.fecha === hoy;
+    const esEspecial = !!(FESTIVOS_ESTADO.fechasEspeciales && FESTIVOS_ESTADO.fechasEspeciales[g.fecha]);
     const d = new Date(g.fecha + 'T12:00:00');
     const col = document.createElement('div');
     col.className = 'festivos-dia-col' + (esHoy ? ' es-hoy' : '') + (g.items.length ? '' : ' vacio');
@@ -391,21 +399,28 @@ function renderListaFestivos_(listaEl, grupos, hayFiltrosDeContenido) {
             ? '<button type="button" class="festivos-del" data-id="' + escapeAttr(it.id) + '" data-tipo="' + escapeAttr(it.tipo) + '" title="Eliminar">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>'
             : '';
+          // Lápiz para editar el texto: solo notas y bloqueos (los cambios
+          // puntuales se editan volviendo a crearlos, su texto es automático).
+          const editBtn = (it.id && it.tipo !== 'cambio')
+            ? '<button type="button" class="festivos-edit" data-id="' + escapeAttr(it.id) + '" title="Editar texto">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'
+            : '';
           return '<div class="' + clase + '">' +
             '<span class="festivos-item-icon">' + icono + '</span>' +
             '<div class="festivos-item-body">' +
               '<span class="festivos-item-tag">' + escapeHtml(it.tag) + '</span>' +
               '<span class="festivos-item-texto">' + escapeHtml(it.texto) + '</span>' +
-            '</div>' + delBtn + '</div>';
+            '</div>' + editBtn + delBtn + '</div>';
         }).join('')
       : '<div class="festivos-item-vacio">Sin ninguna anotación</div>';
     col.innerHTML =
       '<div class="festivos-dia-col-header">' +
-        '<button type="button" class="festivos-dia-col-add" data-fecha="' + g.fecha + '" title="Añadir cierre / observación para este día">' +
+        '<button type="button" class="festivos-dia-col-add" data-fecha="' + g.fecha + '" title="Añadir bloqueo / observación para este día">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>' +
         '</button>' +
         '<div class="festivos-dia-col-badge"><span class="dia">' + d.getDate() + '</span><span class="mes">' + MESES_ES[d.getMonth()].slice(0, 3) + '</span></div>' +
-        '<div class="festivos-dia-col-nombre">' + escapeHtml(DIAS_SEMANA_ES[d.getDay()]) +
+        '<div class="festivos-dia-col-nombre' + (esEspecial ? ' especial' : '') + '"' + (esEspecial ? ' title="Este día usa una plantilla especial (Rutas y tiendas)"' : '') + '>' +
+          escapeHtml(esEspecial ? 'Conteo especial' : DIAS_SEMANA_ES[d.getDay()]) +
           (esHoy ? '<span class="festivos-chip-hoy">Hoy</span>' : '') +
         '</div>' +
       '</div>' +
@@ -420,6 +435,14 @@ function renderListaFestivos_(listaEl, grupos, hayFiltrosDeContenido) {
     btn.onclick = function (e) {
       e.stopPropagation();
       abrirGestorObservaciones(btn.getAttribute('data-fecha'));
+    };
+  });
+
+  listaEl.querySelectorAll('.festivos-edit').forEach(function (btn) {
+    btn.onclick = function () {
+      const cont = btn.closest('.festivos-item');
+      const actual = cont ? cont.querySelector('.festivos-item-texto').textContent : '';
+      editarObservacionDesdeFestivos_(btn.getAttribute('data-id'), actual);
     };
   });
 
@@ -439,7 +462,9 @@ function quitarDeCacheFestivos_(id) {
   (FESTIVOS_ESTADO.datosCache || []).forEach(function (data) {
     if (!data) return;
     if (data.notasGenerales) {
-      data.notasGenerales = data.notasGenerales.filter(function (n) { return n.id !== id; });
+      // También la nota automática del día ligada a un cambio puntual: en el
+      // servidor se borra junto con el cambio, así que aquí también.
+      data.notasGenerales = data.notasGenerales.filter(function (n) { return n.id !== id && n.excepcionId !== id; });
     }
     (data.secciones || []).forEach(function (seccion) {
       if (seccion.notas) {
@@ -459,6 +484,41 @@ function quitarDeCacheFestivos_(id) {
       if (seccion.excepcionesSalida) {
         seccion.excepcionesSalida = seccion.excepcionesSalida.filter(function (e) { return e.id !== id; });
       }
+    });
+  });
+}
+
+/** Lápiz de una nota o bloqueo: abre el mismo cuadro de texto de siempre
+ *  (en MAYÚSCULAS) con el texto actual, lo guarda con editarObservacion y
+ *  lo cambia al momento en el caché, sin recargar todo el rango. */
+function editarObservacionDesdeFestivos_(id, textoActual) {
+  appPrompt('Editar observación', 'Escribe el nuevo texto…', function (texto) {
+    const nuevo = String(texto).trim().toUpperCase();
+    if (!nuevo || nuevo === textoActual) return;
+    llamarApi_('editarObservacion', [id, nuevo])
+      .then(function () {
+        cambiarTextoEnCacheFestivos_(id, nuevo);
+        aplicarFiltrosFestivos_();
+        mostrarToast('Observación actualizada');
+        if (document.getElementById('calendar-body')) cargarCalendario();
+      })
+      .catch(mostrarErrorServidor);
+  });
+  const area = document.getElementById('modal-textarea');
+  if (area) {
+    area.value = textoActual || '';
+    setTimeout(function () { area.focus(); area.setSelectionRange(area.value.length, area.value.length); }, 60);
+  }
+}
+
+/** Cambia en el caché local el texto de la nota/bloqueo con ese id. */
+function cambiarTextoEnCacheFestivos_(id, texto) {
+  (FESTIVOS_ESTADO.datosCache || []).forEach(function (data) {
+    if (!data) return;
+    (data.notasGenerales || []).forEach(function (n) { if (n.id === id) n.texto = texto; });
+    (data.secciones || []).forEach(function (seccion) {
+      (seccion.notas || []).forEach(function (n) { if (n.id === id) n.texto = texto; });
+      (seccion.tiendas || []).forEach(function (t) { if (t.cierreId === id) t.motivoCierre = texto; });
     });
   });
 }

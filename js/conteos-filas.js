@@ -12,6 +12,10 @@ document.addEventListener('wheel', function (e) {
   }
 }, { passive: false, capture: true });
 
+/** Kilos por palet de cada nave, para el PESO automático (ver
+ *  attachCalculoYValidacion): 60 = GAITE, pta = PTA, cart = CARTAMA. */
+const PESO_PALET_KG = { c60: 200, pta: 300, cart: 250 };
+
 /** Texto de la columna LÍMITE: el número si la tienda tiene uno
  *  configurado (en Configuración tiendas o, si lo tiene, el propio de
  *  ese día en Plantilla), o "NO" si no tiene límite. Se usa tanto para
@@ -40,7 +44,60 @@ function celdaConteoHtml(campo, valor, forzado) {
   return '<input class="celda" data-campo="' + campo + '" type="number" value="' + valor + '">';
 }
 
-function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress, tieneSobrestock) {
+/**
+ * "Doble salida" (cambio puntual en el que la tienda sale ese día por DOS
+ * agrupaciones, ver Gestión festivos > Cambio puntual): las columnas que
+ * rellena la OTRA agrupación se pintan como una casilla vacía, gris
+ * azulada y no editable. Sigue llevando data-campo para que el TOTAL, el
+ * guardado y el PDF la traten como vacía; el backend (guardar_conteo)
+ * ignora además lo que llegue en esas columnas desde esta agrupación.
+ */
+function celdaOtraAgrupacionHtml_(campo, otraAgrupacion) {
+  const nombreOtra = parsearNombreAgrupacion(otraAgrupacion || '').titulo || 'la otra agrupación';
+  return '<input class="celda celda-otra-agencia" data-campo="' + campo + '" type="text" value="" placeholder="—" readonly tabindex="-1" ' +
+    'title="Doble salida: esta columna la rellena hoy ' + escapeAttr(nombreOtra) + '">';
+}
+
+/** Columnas (60/PTA/CARTAMA) que le tocan a ESTA agrupación en una doble
+ *  salida, como texto para el aviso de la fila: "60, CARTAMA". Las que
+ *  salen por las dos agrupaciones (casilla compartida, cada una con su
+ *  número) llevan "(en las dos)". */
+function camposPropiosDobleTexto_(camposFuera, camposCompartidos) {
+  const etiquetas = { c60: '60', pta: 'PTA', cart: 'CARTAMA' };
+  return ['c60', 'pta', 'cart']
+    .filter(function (c) { return (camposFuera || []).indexOf(c) === -1; })
+    .map(function (c) { return etiquetas[c] + ((camposCompartidos || []).indexOf(c) !== -1 ? ' (en las dos)' : ''); })
+    .join(', ');
+}
+
+/**
+ * Celda de VIERNES (solo si la agrupación la tiene activada ese día, ver
+ * seccion.tieneViernes). Si la tienda está excluida del viernes (desde
+ * "Rutas y tiendas"), se pinta una casilla gris bloqueada con una X, como
+ * en la hoja de Excel de siempre, y NO lleva data-campo: así recogerFilas
+ * no manda "viernes" para esa tienda y el backend no la toca.
+ */
+function celdaViernesHtml_(t) {
+  if (t.excluidaViernes) {
+    return '<td><div class="celda-viernes-excluida" title="Esta tienda no lleva VIERNES">X</div></td>';
+  }
+  return '<td><input class="celda celda-viernes" data-campo="viernes" type="number" value="' + (t.viernes == null ? '' : t.viernes) + '" title="VIERNES: suma al TOTAL de la tienda, pero no al total de palets de la carga ni al envío a la agencia"></td>';
+}
+
+/**
+ * Celda de DOMINGO: exactamente igual que la de VIERNES (ver
+ * celdaViernesHtml_), pero con su propia columna en la base de datos
+ * (conteos.casilla_domingo) y su propio interruptor por ruta
+ * (seccion.tieneCasillaDomingo) y por tienda (t.excluidaDomingo).
+ */
+function celdaDomingoHtml_(t) {
+  if (t.excluidaDomingo) {
+    return '<td><div class="celda-domingo-excluida" title="Esta tienda no lleva DOMINGO">X</div></td>';
+  }
+  return '<td><input class="celda celda-domingo" data-campo="casillaDomingo" type="number" value="' + (t.casillaDomingo == null ? '' : t.casillaDomingo) + '" title="DOMINGO: suma al TOTAL de la tienda, pero no al total de palets de la carga ni al envío a la agencia"></td>';
+}
+
+function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress, tieneSobrestock, tieneViernes, tieneDomingo) {
   const nombreLimpio = quitarMarcadorNombre(t.nombre);
   const badge = badgeTransitoTienda(t.transito);
   const badgeHtml = badge
@@ -59,8 +116,8 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
     return '<tr class="fila-cerrada' + claseGrupo + '" data-row="' + t.row + '" data-nombre="' + escapeAttr(t.nombre) + '" data-cierre-id="' + escapeAttr(t.cierreId) + '"' + atrGrupo + '>' +
       '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
       '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
-      '<td colspan="' + (5 + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre">CERRADA — ' + escapeHtml(t.motivoCierre) + '</div></td>' +
-      '<td><button type="button" class="btn-reabrir">Reabrir</button></td>' +
+      '<td colspan="' + (5 + (tieneViernes ? 1 : 0) + (tieneDomingo ? 1 : 0) + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre">' + escapeHtml(String(t.motivoCierre || 'CONTEO BLOQUEADO').toUpperCase()) + '</div></td>' +
+      '<td><button type="button" class="btn-reabrir" title="Desbloquear el conteo de esta tienda">Desbloquear</button></td>' +
       '</tr>';
   }
   // Tienda que HOY sale por otra agrupación por un "cambio puntual"
@@ -72,7 +129,7 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
     return '<tr class="fila-sale-excepcion' + claseGrupo + '" data-row="' + t.row + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + '>' +
       '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
       '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
-      '<td colspan="' + (5 + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre motivo-excepcion">POR EXCEPCIÓN SALE POR ' + escapeHtml(t.excepcionAgrupacionDestino || '') + '</div></td>' +
+      '<td colspan="' + (5 + (tieneViernes ? 1 : 0) + (tieneDomingo ? 1 : 0) + (tienePeso ? 1 : 0) + (tieneCExpress ? 1 : 0) + (tieneSobrestock ? 1 : 0)) + '"><div class="motivo-cierre motivo-excepcion">POR EXCEPCIÓN SALE POR ' + escapeHtml(t.excepcionAgrupacionDestino || '') + '</div></td>' +
       '<td></td>' +
       '</tr>';
   }
@@ -80,23 +137,55 @@ function filaHtml(t, esPrimeraDeGrupo, esUltimaDeGrupo, tienePeso, tieneCExpress
   // puntual": se resalta toda la fila en amarillo suave para que no pase
   // desapercibida entre las tiendas de siempre de esta agrupación.
   const claseExcepcionEntrada = t.entraPorExcepcion ? ' fila-entra-excepcion' : '';
-  const tituloEntrada = t.entraPorExcepcion ? ' title="Sale por aquí hoy por un cambio puntual (excepción), no es de esta agrupación habitualmente."' : '';
-  return '<tr class="' + (claseGrupo.trim() + claseExcepcionEntrada).trim() + '" data-row="' + t.row + '" data-limite="' + escapeAttr(textoLimite_(t.limite)) + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + tituloEntrada + '>' +
-    '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + '</td>' +
+  // "Doble salida": la tienda sale hoy por esta agrupación Y por otra; cada
+  // una rellena solo sus columnas (t.camposFuera = las que NO son de aquí;
+  // 'extras' = PDTE, PESO, C.EXPRESS, SOBRESTOCK, VIERNES y DOMINGO, que se quedan
+  // siempre en la agrupación de origen).
+  const esDoble = !!t.dobleSalida;
+  const fuera = esDoble ? (t.camposFuera || []) : [];
+  const esFuera = function (campo) { return fuera.indexOf(campo) !== -1; };
+  const otra = t.dobleOtraAgrupacion || '';
+  const claseDoble = (esDoble && !t.entraPorExcepcion) ? ' fila-doble-salida' : '';
+  // Etiqueta corta "⇄ DOBLE" al lado del nombre (para no estrechar la fila);
+  // el detalle (con qué agrupación y qué casillas) sale al pasar el ratón.
+  const avisoDobleHtml = esDoble
+    ? '<span class="aviso-doble-salida" title="' + escapeAttr(
+        (t.entraPorExcepcion ? 'Doble salida con ' : 'También sale por ') +
+        parsearNombreAgrupacion(otra).titulo +
+        ' · aquí: ' + (camposPropiosDobleTexto_(fuera, t.camposCompartidos) || 'solo PDTE')
+      ) + '">&#8644; DOBLE</span>'
+    : '';
+  const tituloEntrada = t.entraPorExcepcion
+    ? (esDoble
+        ? ' title="Doble salida: hoy esta tienda sale por aquí y por ' + escapeAttr(otra) + '. Aquí solo se rellenan sus columnas."'
+        : ' title="Sale por aquí hoy por un cambio puntual (excepción), no es de esta agrupación habitualmente."')
+    : (esDoble ? ' title="Doble salida: hoy esta tienda también sale por ' + escapeAttr(otra) + '. Las columnas en gris las rellena esa agrupación."' : '');
+  const celdaNave = function (campo) {
+    if (esFuera(campo)) return celdaOtraAgrupacionHtml_(campo, otra);
+    return celdaConteoHtml(campo, t[campo], !!(t.forzados && t.forzados[campo] !== undefined));
+  };
+  const celdaExtra = function (campo, valor, step) {
+    if (esFuera('extras')) return celdaOtraAgrupacionHtml_(campo, otra);
+    return '<input class="celda" data-campo="' + campo + '" type="number"' + (step ? ' step="' + step + '"' : '') + ' value="' + (valor == null ? '' : valor) + '">';
+  };
+  return '<tr class="' + (claseGrupo.trim() + claseExcepcionEntrada + claseDoble).trim() + '" data-row="' + t.row + '" data-limite="' + escapeAttr(textoLimite_(t.limite)) + '" data-nombre="' + escapeAttr(t.nombre) + '"' + atrGrupo + tituloEntrada + '>' +
+    '<td class="nombre">' + escapeHtml(nombreLimpio) + badgeHtml + notaHtml + avisoDobleHtml + '</td>' +
     '<td class="limite">' + textoLimite_(t.limite) + '</td>' +
-    '<td>' + celdaConteoHtml('c60', t.c60, !!(t.forzados && t.forzados.c60 !== undefined)) + '</td>' +
-    '<td>' + celdaConteoHtml('pta', t.pta, !!(t.forzados && t.forzados.pta !== undefined)) + '</td>' +
-    '<td>' + celdaConteoHtml('cart', t.cart, !!(t.forzados && t.forzados.cart !== undefined)) + '</td>' +
+    (tieneViernes ? (esFuera('extras') && !t.excluidaViernes ? '<td>' + celdaOtraAgrupacionHtml_('viernes', otra) + '</td>' : celdaViernesHtml_(t)) : '') +
+    (tieneDomingo ? (esFuera('extras') && !t.excluidaDomingo ? '<td>' + celdaOtraAgrupacionHtml_('casillaDomingo', otra) + '</td>' : celdaDomingoHtml_(t)) : '') +
+    '<td>' + celdaNave('c60') + '</td>' +
+    '<td>' + celdaNave('pta') + '</td>' +
+    '<td>' + celdaNave('cart') + '</td>' +
     '<td>' +
       '<input class="celda celda-total" data-campo="total" type="number" value="' + t.total + '" readonly tabindex="-1" style="display:none">' +
-      '<input class="celda celda-total-visual" data-campo="totalVisual" type="number" readonly tabindex="-1" title="Incluye el PDTE. El límite del camión, la cabecera y el envío a agencia siguen contando solo 60+PTA+CART.">' +
+      '<input class="celda celda-total-visual" data-campo="totalVisual" type="number" readonly tabindex="-1" title="Incluye el PDTE, el VIERNES y el DOMINGO. El límite del camión, la cabecera y el envío a agencia siguen contando solo 60+PTA+CART.">' +
       '<div class="diff-nota"></div>' +
     '</td>' +
-    '<td><input class="celda" data-campo="pdte" type="number" value="' + t.pdte + '"></td>' +
-    (tienePeso ? '<td><input class="celda" data-campo="peso" type="number" step="0.01" value="' + (t.peso == null ? '' : t.peso) + '"></td>' : '') +
-    (tieneCExpress ? '<td><input class="celda" data-campo="cexpress" type="number" step="0.01" value="' + (t.cexpress == null ? '' : t.cexpress) + '"></td>' : '') +
-    (tieneSobrestock ? '<td><input class="celda" data-campo="sobrestock" type="number" step="0.01" value="' + (t.sobrestock == null ? '' : t.sobrestock) + '"></td>' : '') +
-    '<td><button type="button" class="btn-cerrar-tienda" title="Marcar tienda como cerrada">' +
+    '<td>' + celdaExtra('pdte', t.pdte) + '</td>' +
+    (tienePeso ? '<td>' + celdaExtra('peso', t.peso, '0.01') + '</td>' : '') +
+    (tieneCExpress ? '<td>' + celdaExtra('cexpress', t.cexpress, '0.01') + '</td>' : '') +
+    (tieneSobrestock ? '<td>' + celdaExtra('sobrestock', t.sobrestock, '0.01') + '</td>' : '') +
+    '<td><button type="button" class="btn-cerrar-tienda" title="Bloquear conteo de esta tienda">' +
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></button></td>' +
     '</tr>';
 }
@@ -116,7 +205,21 @@ function attachCalculoYValidacion(tr) {
   const totalInput = tr.querySelector('input[data-campo="total"]');
   const pdteInput = tr.querySelector('input[data-campo="pdte"]');
   const totalVisualInput = tr.querySelector('input[data-campo="totalVisual"]');
+  const viernesInput = tr.querySelector('input[data-campo="viernes"]');
+  const domingoInput = tr.querySelector('input[data-campo="casillaDomingo"]');
   const nota = tr.querySelector('.diff-nota');
+
+  // VIERNES: igual que el PDTE, se suma solo a lo que VE el usuario en el
+  // TOTAL de la tienda y al aviso de límite de esta fila, pero NO al campo
+  // "total" real (que es el que suman la cabecera de palets de la
+  // agrupación, los grupos de palets y el envío a la agencia).
+  function valorViernes() {
+    return (viernesInput && viernesInput.value !== '') ? (parseFloat(viernesInput.value) || 0) : 0;
+  }
+  // DOMINGO: exactamente igual que VIERNES.
+  function valorDomingo() {
+    return (domingoInput && domingoInput.value !== '') ? (parseFloat(domingoInput.value) || 0) : 0;
+  }
 
   // recalcTotalVisual: solo actualiza lo que VE el usuario en la columna
   // TOTAL (real + PDTE). No toca totalInput (el real), así que no afecta
@@ -128,10 +231,12 @@ function attachCalculoYValidacion(tr) {
     if (!totalVisualInput) return;
     const real = totalInput.value === '' ? 0 : (parseFloat(totalInput.value) || 0);
     const pdte = (pdteInput && pdteInput.value !== '') ? (parseFloat(pdteInput.value) || 0) : 0;
-    if (totalInput.value === '' && pdte === 0) {
+    const vie = valorViernes();
+    const dom = valorDomingo();
+    if (totalInput.value === '' && pdte === 0 && vie === 0 && dom === 0) {
       totalVisualInput.value = '';
     } else {
-      totalVisualInput.value = real + pdte;
+      totalVisualInput.value = real + pdte + vie + dom;
     }
   }
 
@@ -155,11 +260,14 @@ function attachCalculoYValidacion(tr) {
     nota.textContent = '';
     nota.className = 'diff-nota';
 
-    const total = parseFloat(totalInput.value);
-    if (isNaN(total) || !limite) return;
+    const vie = valorViernes();
+    const dom = valorDomingo();
+    const totalReal = parseFloat(totalInput.value);
+    if ((isNaN(totalReal) && vie === 0 && dom === 0) || !limite) return;
+    const total = isNaN(totalReal) ? 0 : totalReal;
 
     const pdte = (pdteInput && pdteInput.value !== '') ? (parseFloat(pdteInput.value) || 0) : 0;
-    const exceso = (total + pdte) - limite;
+    const exceso = (total + pdte + vie + dom) - limite;
     if (exceso >= 3) {
       tr.classList.add('fila-alerta');
       nota.textContent = '+' + exceso + ' sobre el límite — consultar a informática';
@@ -171,12 +279,39 @@ function attachCalculoYValidacion(tr) {
     }
   }
 
+  // PESO automático (solo si la ruta tiene la casilla PESO activada y la
+  // casilla es de esta agrupación, no de la otra en una doble salida):
+  // cada palet pesa según su nave -> 60 (GAITE) 200 kg, PTA 300 kg,
+  // CART. (CARTAMA) 250 kg. Se recalcula cada vez que cambian 60/PTA/CART.
+  // La casilla sigue siendo editable por si hubiera que corregirla a mano,
+  // pero el siguiente cambio en 60/PTA/CART la vuelve a calcular.
+  const pesoInput = tr.querySelector('input[data-campo="peso"]');
+  const pesoAuto = pesoInput && !pesoInput.classList.contains('celda-otra-agencia');
+  function recalcPeso() {
+    if (!pesoAuto) return;
+    // "NO" sin forzar o casilla vacía cuentan como 0.
+    const n = function (input) { return input ? (parseFloat(input.value) || 0) : 0; };
+    const vacias = c60Input.value === '' && ptaInput.value === '' && cartInput.value === '';
+    const kg = n(c60Input) * PESO_PALET_KG.c60 + n(ptaInput) * PESO_PALET_KG.pta + n(cartInput) * PESO_PALET_KG.cart;
+    pesoInput.value = (vacias || kg === 0) ? '' : kg;
+  }
+  if (pesoAuto) {
+    pesoInput.title = 'Calculado automáticamente: 60 × 200 kg + PTA × 300 kg + CART. × 250 kg';
+    c60Input.addEventListener('input', recalcPeso);
+    ptaInput.addEventListener('input', recalcPeso);
+    cartInput.addEventListener('input', recalcPeso);
+    // Al abrir el conteo, si aún no hay peso guardado pero sí palets, se rellena.
+    if (pesoInput.value === '') recalcPeso();
+  }
+
   c60Input.addEventListener('input', recalcTotal);
   ptaInput.addEventListener('input', recalcTotal);
   cartInput.addEventListener('input', recalcTotal);
   if (cexpressInput) cexpressInput.addEventListener('input', recalcTotal);
   if (sobrestockInput) sobrestockInput.addEventListener('input', recalcTotal);
   if (pdteInput) pdteInput.addEventListener('input', function () { validar(); recalcTotalVisual(); });
+  if (viernesInput) viernesInput.addEventListener('input', function () { validar(); recalcTotalVisual(); });
+  if (domingoInput) domingoInput.addEventListener('input', function () { validar(); recalcTotalVisual(); });
   validar();
   recalcTotalVisual();
 }
@@ -191,6 +326,14 @@ function attachCalculoYValidacion(tr) {
 function attachForzarNo(tr) {
   tr.querySelectorAll('input.celda-no').forEach(function (input) {
     input.addEventListener('click', function () {
+      // Forzar palets en una casilla "NO" requiere el permiso
+      // "forzar_palets" (los administradores siempre pueden). El servidor
+      // (guardar_conteo) también lo comprueba, así que esto es solo para
+      // avisar al momento en vez de dejar escribir el número y fallar al guardar.
+      if (!tienePermiso('forzar_palets')) {
+        mostrarModalSinPermiso('NO ESTÁ PERMITIDO MANDAR PALETS DE ESTA NAVE, HABLE CON SU RESPONSABLE');
+        return;
+      }
       appConfirm('FORZAR SALIDA DE PALETS', 'Esta casilla trae "NO" configurado.\nSignifica que esta tienda no debería recibir palets de esta nave\n¿Quieres forzar el envio de palets de esta nave?.',
         function () {
           appPrompt('Número de palets a forzar', 'Ej: 2', function (texto) {
@@ -333,6 +476,15 @@ function recogerFilas(tableWrap) {
     // tiene activado (ver seccion.tieneSobrestock).
     const sobrestock = get('sobrestock');
     if (sobrestock !== undefined) fila.sobrestock = sobrestock;
+    // "viernes" solo existe si la agrupación lo tiene activado ese día (ver
+    // seccion.tieneViernes) y la tienda no está excluida. Si no hay
+    // casilla, no se manda nada y el backend deja el valor como estaba.
+    const viernes = get('viernes');
+    if (viernes !== undefined) fila.viernes = viernes;
+    // "casillaDomingo": igual que "viernes" (solo si la agrupación tiene la
+    // casilla DOMINGO activada y la tienda no está excluida).
+    const casillaDomingo = get('casillaDomingo');
+    if (casillaDomingo !== undefined) fila.casillaDomingo = casillaDomingo;
     filas.push(fila);
   });
   return filas;

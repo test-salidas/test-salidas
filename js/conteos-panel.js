@@ -156,6 +156,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
     '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="800" fill="#ffffff">PDF</text>' +
     '</svg></button>' +
+    '<button type="button" class="btn-excel-seccion" title="Exportar a Excel esta agrupación">' +
+    '<svg width="16" height="18" viewBox="0 0 24 26">' +
+    '<path d="M4 2h11l6 6v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#1d6f42"/>' +
+    '<path d="M15 2v6h6" fill="#ffffff" opacity="0.32"/>' +
+    '<text x="12" y="19" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="800" fill="#ffffff">XLS</text>' +
+    '</svg></button>' +
     (seccion.tienePdfEspecial
       ? '<button type="button" class="btn-pdf-especial-seccion" title="Generar PDF especial (formato de reparto en camión) de esta agrupación">' +
         '<svg width="16" height="18" viewBox="0 0 24 26">' +
@@ -264,15 +270,28 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const c = seccion.carga;
     return !!(c && c.origen !== 'definitivo' && seccion.estado !== 'enviado' && Array.isArray(c.lista));
   }
-  // { 'NOMBRE TIENDA': palets } de las tiendas ajustadas a mano que siguen en la tabla.
+  // { 'NOMBRE TIENDA': true } de las tiendas repartidas entre varios camiones
+  // («Dividir…»). Su carga queda fijada como si se hubiera ajustado a mano:
+  // si cambia su conteo, hay que revisar el reparto.
+  function tiendasDivididas_() {
+    const res = {};
+    const c = seccion.carga;
+    if (!c || !Array.isArray(c.camiones) || c.camiones.length < 2) return res;
+    c.camiones.forEach(function (cam) {
+      if (cam && cam.parciales) Object.keys(cam.parciales).forEach(function (t) { res[t] = true; });
+    });
+    return res;
+  }
+  // { 'NOMBRE TIENDA': palets } de las tiendas ajustadas a mano (o divididas) que siguen en la tabla.
   function ajustesGuardados_() {
     const res = {};
     if (!cargaEditable_()) return res;
     const abiertas = {};
+    const divididas = tiendasDivididas_();
     filasCargaActuales_().forEach(function (f) { if (!f.cerrada) abiertas[f.nombre] = true; });
     seccion.carga.lista.forEach(function (t) {
       if (t.cerrada || t.cargar === null || t.cargar === undefined || !abiertas[t.tienda]) return;
-      if (Number(t.cargar) !== Number(t.contados)) res[t.tienda] = Number(t.cargar);
+      if (Number(t.cargar) !== Number(t.contados) || divididas[t.tienda]) res[t.tienda] = Number(t.cargar);
     });
     return res;
   }
@@ -281,12 +300,13 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const res = {};
     if (!cargaEditable_()) return res;
     const guardadas = {};
+    const divididas = tiendasDivididas_();
     seccion.carga.lista.forEach(function (t) { guardadas[t.tienda] = t; });
     filasCargaActuales_().forEach(function (f) {
       const g = guardadas[f.nombre];
       if (f.cerrada || !g || g.cerrada) return;
       const antes = Number(g.contados) || 0;
-      if (Number(g.cargar) !== antes && f.contados !== antes) res[f.nombre] = { antes: antes, ahora: f.contados };
+      if ((Number(g.cargar) !== antes || divididas[f.nombre]) && f.contados !== antes) res[f.nombre] = { antes: antes, ahora: f.contados };
     });
     return res;
   }
@@ -318,7 +338,12 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   }
   function infoCargaParaModal_() {
     const c = seccion.carga;
-    return c ? { tipo: c.origen, hora: c.hora, enviadoPor: c.por, lista: c.lista } : null;
+    return c ? { tipo: c.origen, hora: c.hora, enviadoPor: c.por, lista: c.lista, camiones: c.camiones || null } : null;
+  }
+  // Camiones (matrícula, remolque y tiendas) de la carga vigente, si la hay.
+  function camionesCarga_() {
+    const c = seccion.carga;
+    return (c && Array.isArray(c.camiones)) ? c.camiones : null;
   }
   // Click en el camioncito (servidor nuevo).
   function abrirCarga_() {
@@ -327,23 +352,37 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const c = seccion.carga;
     const revisar = tiendasARevisar_();
     const hayRevisar = Object.keys(revisar).length > 0;
-    if (puedeAjustarCarga_() && (!c || c.origen === 'ajuste' || hayRevisar)) {
+    const puede = puedeAjustarCarga_();
+    // A revisar: se abre directamente en edición para verificarla.
+    if (puede && hayRevisar) {
       abrirAjustarCarga_(null, null);
       return;
     }
+    // Siempre se abre como la ven los flejadores (solo lectura). Con el
+    // permiso "Ajustar carga" sale además el lápiz al lado de la X para
+    // pasar a editarla y guardarla.
     // Carga ajustada sin enviar: se enseña con lo contado AHORA (la que
     // saldría en el email). Previsión/Definitivo: lo que se mandó.
-    const info = infoCargaParaModal_();
+    let info = infoCargaParaModal_();
     if (info && info.tipo === 'ajuste' && seccion.estado !== 'enviado') info.lista = listaCargaEfectiva_();
+    // Nadie la ha ajustado todavía: se enseña lo contado (con o sin permiso),
+    // con la etiqueta "CARGA SIN AJUSTAR POR UN RESPONSABLE".
+    if (!info && seccion.estado !== 'enviado') info = { tipo: 'contado', lista: listaCargaEfectiva_() };
+    const onEditar = puede ? function () { abrirAjustarCarga_(null, null, true); } : null;
     mostrarModalListaCarga(info, titulo, fechaTexto, {
       revisar: revisar,
-      soloLectura: !puedeAjustarCarga_() && !(c && c.origen === 'definitivo') && seccion.estado !== 'enviado',
-      onAjustar: puedeAjustarCarga_() ? function () { abrirAjustarCarga_(null, null); } : null
+      soloLectura: !puede && !(c && c.origen === 'definitivo') && seccion.estado !== 'enviado',
+      onEditar: onEditar
     });
+    // Sin ajustar todavía y con permiso: ventanita encima preguntando si
+    // se quiere ajustar (solo se quita con sus botones o con Escape).
+    if (puede && info && info.tipo === 'contado') mostrarAvisoCargaSinAjustar(onEditar);
   }
   // Modal editable. tipoEnvio: 'prevision'|'definitivo' si se abre en mitad
   // de un envío (entonces alTerminar sigue con el envío tras guardar).
-  function abrirAjustarCarga_(tipoEnvio, alTerminar) {
+  // desdeLapiz: se ha entrado con el lápiz de la vista de solo lectura;
+  // al guardar o cancelar se vuelve a esa vista.
+  function abrirAjustarCarga_(tipoEnvio, alTerminar, desdeLapiz) {
     const ajustes = ajustesGuardados_();
     const revisar = tiendasARevisar_();
     const filas = filasCargaActuales_().map(function (f) {
@@ -358,24 +397,29 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       fechaTexto: formatearFechaLarga(fecha),
       filas: filas,
       carga: seccion.carga,
+      camiones: camionesCarga_(),
       tipoEnvio: tipoEnvio,
-      onGuardar: function (cargas) {
-        guardarCarga_(cargas, function (ok) {
+      desdeLapiz: !!desdeLapiz,
+      onCancelar: desdeLapiz ? abrirCarga_ : null,
+      onGuardar: function (cargas, camiones) {
+        guardarCarga_(cargas, camiones, function (ok) {
           if (!ok) return;
           if (alTerminar) { alTerminar(); return; }
           cerrarModal();
+          if (desdeLapiz) abrirCarga_();
           mostrarToast('Carga guardada');
         });
       }
     });
   }
   // Guarda primero el conteo (para que el servidor vea lo mismo que hay en
-  // pantalla) y después la carga.
-  function guardarCarga_(cargas, done) {
+  // pantalla) y después la carga, con sus camiones (matrícula, remolque y
+  // tiendas de cada uno; [] = sin camiones).
+  function guardarCarga_(cargas, camiones, done) {
     mostrarModalCargando('Guardando la carga del camión…');
     autoguardarSeccion(function (ok) {
       if (!ok) { cerrarModal(); done(false); return; }
-      llamarApi_('guardarCargaAjustada', [dia, seccion.nombre, fecha, cargas])
+      llamarApi_('guardarCargaAjustada', [dia, seccion.nombre, fecha, cargas, camiones || []])
         .then(function (carga) {
           seccion.carga = carga || null;
           actualizarEstadoCarga_();
@@ -441,9 +485,13 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     nombresPorGrupo[t.notaGrupoId].push(t.nombre);
   });
 
-  const filasHtml = seccion.tiendas.map(function (t, i) {
-    const anterior = seccion.tiendas[i - 1];
-    const siguiente = seccion.tiendas[i + 1];
+  // Las tiendas de un mismo grupo de palets se pintan juntas (ver
+  // juntarGruposDePalets en conteos-badges.js), aunque en la plantilla haya
+  // otras tiendas en medio.
+  const tiendasEnOrden = juntarGruposDePalets(seccion.tiendas);
+  const filasHtml = tiendasEnOrden.map(function (t, i) {
+    const anterior = tiendasEnOrden[i - 1];
+    const siguiente = tiendasEnOrden[i + 1];
     const esPrimeraDeGrupo = !!t.notaGrupoId && (!anterior || anterior.notaGrupoId !== t.notaGrupoId);
     const esUltimaDeGrupo = !!t.notaGrupoId && (!siguiente || siguiente.notaGrupoId !== t.notaGrupoId);
     const headerHtml = esPrimeraDeGrupo ? filaGrupoHeaderHtml(t, nombresPorGrupo[t.notaGrupoId], seccion.tienePeso, seccion.tieneCExpress, seccion.tieneSobrestock, seccion.tieneViernes, seccion.tieneCasillaDomingo) : '';
@@ -983,7 +1031,7 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
       const revisar = tiendasARevisar_();
       if (Object.keys(revisar).length) {
         if (puedeAjustarCarga_()) abrirAjustarCarga_(tipo, function () { continuarEnvio_(tipo); });
-        else mostrarModalCargaPendiente({ titulo: titulo, fechaTexto: fechaTexto, tipo: tipo, lista: listaCargaEfectiva_(), revisar: revisar });
+        else mostrarModalCargaPendiente({ titulo: titulo, fechaTexto: fechaTexto, tipo: tipo, lista: listaCargaEfectiva_(), revisar: revisar, camiones: camionesCarga_() });
         return;
       }
       mostrarModalCargaCorrecta({
@@ -1095,6 +1143,14 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     btnPdf.onclick = function (e) {
       e.stopPropagation();
       generarPdfSeccion(seccion, dia, fecha, tableWrap);
+    };
+  }
+
+  const btnExcel = header.querySelector('.btn-excel-seccion');
+  if (btnExcel) {
+    btnExcel.onclick = function (e) {
+      e.stopPropagation();
+      generarExcelSeccion(seccion, dia, fecha, tableWrap, btnExcel);
     };
   }
 
@@ -1251,7 +1307,9 @@ if (callback) callback(true, mensaje);
       origen: tipo,
       hora: ('0' + ahora.getHours()).slice(-2) + ':' + ('0' + ahora.getMinutes()).slice(-2),
       por: SESSION_NOMBRE || (resultado && resultado.enviadoPor) || '',
-      lista: (resultado && Array.isArray(resultado.listaCarga)) ? resultado.listaCarga : (seccion.carga ? seccion.carga.lista : null)
+      lista: (resultado && Array.isArray(resultado.listaCarga)) ? resultado.listaCarga : (seccion.carga ? seccion.carga.lista : null),
+      // Los camiones que salieron en el email (el servidor los toma de la carga vigente).
+      camiones: (resultado && resultado.camiones !== undefined) ? resultado.camiones : camionesCarga_()
     };
   }
 

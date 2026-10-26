@@ -105,9 +105,18 @@ const SUPABASE_ACCIONES_ = {
   // Carga del camión ajustada a mano sin enviar nada (camioncito de la
   // cabecera). cargas = { 'NOMBRE TIENDA': palets }. Requiere el permiso
   // "ajustar_carga" (el backend lo comprueba). Devuelve la carga vigente.
+  // camiones (opcional) = [{ matricula, remolque, tiendas: ['NOMBRE TIENDA', ...] }]
+  // ([] = sin camiones). Si viene, se usa guardar_carga_ajustada_v2, que los
+  // guarda; el email de previsión/definitivo los saca de ahí agrupando las
+  // tiendas por camión. Sin camiones, la llamada de siempre.
   guardarCargaAjustada: function (args) {
-    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2], cargas = args[3];
-    return llamarRpcSupabase_('guardar_carga_ajustada', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha, p_cargas: cargas || {} });
+    const dia = args[0], nombreAgrupacion = args[1], fecha = args[2], cargas = args[3], camiones = args[4];
+    const params = { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha, p_cargas: cargas || {} };
+    if (Array.isArray(camiones)) {
+      params.p_camiones = camiones;
+      return llamarRpcSupabase_('guardar_carga_ajustada_v2', params);
+    }
+    return llamarRpcSupabase_('guardar_carga_ajustada', params);
   },
   // "Enviar a informática": misma previsión, pero solo a transporte@primor.eu.
   enviarInformaticaAgencia: function (args) {
@@ -167,9 +176,39 @@ const SUPABASE_ACCIONES_ = {
   getDiasPlantilla: function () {
     return llamarRpcSupabase_('get_dias_plantilla', {});
   },
+  // -- Días especiales: plantilla propia para una fecha concreta --
+  getDiasEspeciales: function () {
+    return llamarRpcSupabase_('get_dias_especiales', {});
+  },
+  crearDiaEspecial: function (args) {
+    const fecha = args[0], diaBase = args[1];
+    return llamarRpcSupabase_('crear_dia_especial', { p_fecha: fecha, p_dia_base: diaBase });
+  },
+  eliminarDiaEspecial: function (args) {
+    const nombre = args[0];
+    return llamarRpcSupabase_('eliminar_dia_especial', { p_nombre: nombre });
+  },
   getPlantillaDia: function (args) {
     const dia = args[0];
     return llamarRpcSupabase_('get_plantilla_dia', { p_dia: dia });
+  },
+  // Cambios puntuales de la fecha de un conteo especial (para marcarlos en
+  // Rutas y tiendas). En un día normal devuelve [].
+  getCambiosPuntualesDiaEspecial: function (args) {
+    return llamarRpcSupabase_('get_cambios_puntuales_dia_especial', { p_dia: args[0] });
+  },
+  // Posición de la tienda puntual dentro de su agrupación de destino:
+  // debajo de una tienda (row), debajo de otra puntual (id), o al principio.
+  colocarCambioPuntual: function (args) {
+    return llamarRpcSupabase_('colocar_cambio_puntual', {
+      p_id: args[0], p_dia: args[1],
+      p_debajo_row: args[2] != null ? args[2] : null,
+      p_debajo_puntual: args[3] || null
+    });
+  },
+  // Grupo de palets de la tienda puntual en la agrupación de destino (null = sin grupo).
+  asignarGrupoCambioPuntual: function (args) {
+    return llamarRpcSupabase_('asignar_grupo_cambio_puntual', { p_id: args[0], p_grupo_id: args[1] || null });
   },
   añadirTiendaPlantilla: function (args) {
     const dia = args[0], nombreSeccion = args[1], nombre = args[2], limite = args[3];
