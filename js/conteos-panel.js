@@ -470,6 +470,11 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   function motivoBloqueo_() {
     return (seccion.carga && seccion.carga.origen === 'prevision') ? 'se ha enviado la previsión' : 'un responsable ha ajustado la carga';
   }
+  // Ficha del modal: motivo, quién y hora del bloqueo.
+  function fichaBloqueo_() {
+    const c = seccion.carga || {};
+    return [['Motivo', tituloBloqueo_()], ['Por', nombreLegible_(c.por)], ['Hora', c.hora]];
+  }
   function tituloBloqueo_() {
     return (seccion.carga && seccion.carga.origen === 'prevision') ? 'Previsión enviada' : 'Carga ajustada';
   }
@@ -553,9 +558,11 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     if (hay && editable) {
       const quien = quienAjusto_();
       avisoBloqueo.hidden = false;
-      avisoBloqueo.innerHTML = SVG_CANDADO_CARGA_ + '<span>' + (esAdmin()
-        ? tituloBloqueo_() + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. El conteo está bloqueado para los operarios. Pulsa el candado para desbloquearlo.'
-        : 'Conteo bloqueado: ' + motivoBloqueo_() + (quien ? ' (' + escapeHtml(quien) + ')' : '') + '. Si hay que cambiar algo, pide a un administrador que lo desbloquee.') + '</span>';
+      const c = seccion.carga || {};
+      avisoBloqueo.innerHTML = SVG_CANDADO_CARGA_ +
+        '<span class="aviso-carga-texto"><b>Conteo bloqueado</b> · ' + escapeHtml(tituloBloqueo_()) +
+        (c.por ? ' por ' + escapeHtml(nombreLegible_(c.por)) : '') + (c.hora ? ' a las ' + escapeHtml(c.hora) : '') + '</span>' +
+        '<span class="aviso-carga-accion">' + (esAdmin() ? 'Pulsa el candado para desbloquearlo' : 'Pide a un administrador que lo desbloquee') + '</span>';
     } else {
       avisoBloqueo.hidden = true;
       avisoBloqueo.innerHTML = '';
@@ -671,20 +678,23 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
   function desbloquearDefinitivo_() {
     const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
     if (!esAdmin()) {
-      appConfirm('Definitivo enviado',
-        'El definitivo de ' + titulo + ' ya está enviado' + (seccion.enviadoPor ? ' (por ' + seccion.enviadoPor + ')' : '') +
-        ' y el conteo está bloqueado. Si hay que cambiar algo, pide a un administrador que lo desbloquee.', function () {});
-      const btnOk = document.getElementById('modal-confirm-btn');
-      if (btnOk) btnOk.textContent = 'Entendido';
-      const btnNo = document.getElementById('modal-cancel-btn');
-      if (btnNo) btnNo.style.display = 'none';
+      mostrarModalCandado_({
+        titulo: 'Conteo bloqueado', agrupacion: titulo, fechaTexto: formatearFechaLarga(fecha),
+        ficha: [['Motivo', 'Definitivo enviado'], ['Por', nombreLegible_(seccion.enviadoPor)], ['Hora', seccion.horaEnvio]],
+        nota: 'Si hay que cambiar algo, pide a un administrador que lo desbloquee.'
+      });
       return;
     }
-    appConfirm('Desbloquear definitivo',
-      '¿Seguro que quieres desbloquear ' + titulo + '? Se deshará el envío del definitivo: se quitará la marca de enviado y se recuperarán los datos para poder seguir editándolos. ' +
-      'El email que ya se mandó a la agencia no se puede recuperar. El conteo quedará desbloqueado para los operarios (si había carga ajustada, se borra). ' +
-      'Solo se puede hacer el mismo día en que se envió.',
-      function () {
+    mostrarModalCandado_({
+      abierto: true, titulo: '¿Desbloquear el definitivo?', agrupacion: titulo, fechaTexto: formatearFechaLarga(fecha),
+      ficha: [['Motivo', 'Definitivo enviado'], ['Por', nombreLegible_(seccion.enviadoPor)], ['Hora', seccion.horaEnvio]],
+      puntos: [
+        'Se deshace el envío del definitivo y se recuperan los números para poder corregirlos.',
+        'El email que ya recibió la agencia no se puede recuperar.',
+        'Si había carga ajustada, se borra, y los operarios podrán volver a tocar el conteo.'
+      ],
+      nota: 'Solo se puede hacer el mismo día en que se envió.',
+      onConfirmar: function () {
         const candado = header.querySelector('.btn-candado-carga');
         if (candado) candado.disabled = true;
         mostrarModalCargando('Desbloqueando el definitivo…');
@@ -707,10 +717,8 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
             cerrarModal();
             mostrarErrorServidor(err);
           });
-      },
-      true);
-    const btnOk = document.getElementById('modal-confirm-btn');
-    if (btnOk) btnOk.textContent = 'Desbloquear';
+      }
+    });
   }
   function pulsarCandado_() {
     if (definitivoDesbloqueable_()) { desbloquearDefinitivo_(); return; }
@@ -718,25 +726,26 @@ function crearSeccionPanel(seccion, dia, fecha, esHoy) {
     const titulo = parsearNombreAgrupacion(seccion.nombre).titulo;
     const quien = quienAjusto_();
     if (!esAdmin()) {
-      appConfirm('Conteo bloqueado',
-        'En ' + titulo + ' ' + motivoBloqueo_() + (quien ? ' (' + quien + ')' : '') +
-        ', así que el conteo está bloqueado. Si hay que cambiar algo, pide a un administrador que lo desbloquee.', function () {});
-      const btnOk = document.getElementById('modal-confirm-btn');
-      if (btnOk) btnOk.textContent = 'Entendido';
-      const btnNo = document.getElementById('modal-cancel-btn');
-      if (btnNo) btnNo.style.display = 'none';
+      mostrarModalCandado_({
+        titulo: 'Conteo bloqueado', agrupacion: titulo, fechaTexto: formatearFechaLarga(fecha),
+        ficha: fichaBloqueo_(),
+        nota: 'Si hay que cambiar algo, pide a un administrador que lo desbloquee.'
+      });
       return;
     }
     const esPrevision = seccion.carga && seccion.carga.origen === 'prevision';
-    appConfirm('Desbloquear carga',
-      '¿Seguro que quieres desbloquear ' + titulo + '? ' +
-      (esPrevision
-        ? 'La previsión ya enviada' + (quien ? ' (' + quien + ')' : '') + ' no se deshace: el email ya salió. Si además había carga ajustada, se borra. '
-        : 'Se borrará la carga ajustada' + (quien ? ' (' + quien + ')' : '') + ', con sus camiones y matrículas, y la app volverá a mostrar el conteo real (' + totalContadoAhora_() + ' palets). ') +
-      'Los operarios podrán volver a modificar el conteo. Si después se vuelve a ajustar la carga o a enviar la previsión, se bloqueará otra vez.',
-      desbloquearCarga_, true);
-    const btnOk = document.getElementById('modal-confirm-btn');
-    if (btnOk) btnOk.textContent = 'Desbloquear';
+    mostrarModalCandado_({
+      abierto: true, titulo: '¿Desbloquear el conteo?', agrupacion: titulo, fechaTexto: formatearFechaLarga(fecha),
+      ficha: fichaBloqueo_(),
+      puntos: [
+        'Los operarios podrán volver a corregir el conteo.',
+        esPrevision
+          ? 'La previsión ya enviada no se deshace: el email ya salió. Si había carga ajustada, se borra.'
+          : 'Se borra la carga ajustada, con sus camiones y matrículas, y se vuelve a ver el conteo real (' + totalContadoAhora_() + ' palets).',
+        'Si se vuelve a ajustar la carga o a enviar la previsión, se bloquea otra vez.'
+      ],
+      onConfirmar: desbloquearCarga_
+    });
   }
   // Desbloquear (solo administradores, el servidor lo comprueba): borra la
   // carga ajustada si la hay y apunta el desbloqueo. Todos los ordenadores
@@ -1935,6 +1944,56 @@ function prepararModalCustom_(tamano) {
   const custom = document.getElementById('modal-custom');
   custom.style.display = 'block';
   custom.innerHTML = '';
+}
+
+/* ---------------- MODAL DEL CANDADO ---------------- */
+
+const SVG_CANDADO_ABIERTO_ = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+
+/** "MARIA DOLORES AGUERA HURTADO" -> "Maria Dolores Aguera Hurtado" (los
+ *  números de usuario, como "43848", se quedan igual). */
+function nombreLegible_(texto) {
+  return String(texto || '').toLowerCase().replace(/(^|[\s\-·])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); });
+}
+
+/** Modal del candado: título, agrupación y fecha, una ficha con motivo /
+ *  quién / hora, y lo que pasa en puntos. Con onConfirmar sale Cancelar +
+ *  el botón (rojo); sin él, solo "Entendido".
+ *  opts = { abierto, titulo, agrupacion, fechaTexto, ficha: [[etiqueta, valor]],
+ *           puntos: [texto], nota, textoBoton, onConfirmar } */
+function mostrarModalCandado_(opts) {
+  prepararModalCustom_('medio');
+  const custom = document.getElementById('modal-custom');
+  const ficha = (opts.ficha || []).filter(function (f) { return f[1]; });
+  custom.innerHTML =
+    '<div class="candado-modal">' +
+      '<div class="candado-modal-cab">' +
+        '<span class="candado-modal-icono' + (opts.abierto ? ' abierto' : '') + '">' + (opts.abierto ? SVG_CANDADO_ABIERTO_ : SVG_CANDADO_CARGA_) + '</span>' +
+        '<span><span class="candado-modal-titulo">' + escapeHtml(opts.titulo) + '</span>' +
+        '<span class="candado-modal-sub">' + escapeHtml(opts.agrupacion) + (opts.fechaTexto ? ' · ' + escapeHtml(opts.fechaTexto) : '') + '</span></span>' +
+      '</div>' +
+      (ficha.length
+        ? '<div class="candado-modal-ficha">' + ficha.map(function (f) {
+            return '<div class="candado-modal-fila"><span class="candado-modal-etq">' + escapeHtml(f[0]) + '</span><span class="candado-modal-val">' + escapeHtml(f[1]) + '</span></div>';
+          }).join('') + '</div>'
+        : '') +
+      (opts.puntos && opts.puntos.length
+        ? '<ul class="candado-modal-puntos">' + opts.puntos.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ul>'
+        : '') +
+      (opts.nota ? '<div class="candado-modal-nota">' + escapeHtml(opts.nota) + '</div>' : '') +
+    '</div>';
+  const actions = document.getElementById('modal-actions');
+  actions.innerHTML = opts.onConfirmar
+    ? '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
+      '<button class="modal-confirm danger" id="modal-confirm-btn">' + escapeHtml(opts.textoBoton || 'Desbloquear') + '</button>'
+    : '<button class="modal-confirm" id="modal-confirm-btn">Entendido</button>';
+  document.getElementById('modal-overlay').style.display = 'flex';
+  const btnNo = document.getElementById('modal-cancel-btn');
+  if (btnNo) btnNo.onclick = cerrarModal;
+  document.getElementById('modal-confirm-btn').onclick = function () {
+    cerrarModal();
+    if (opts.onConfirmar) opts.onConfirmar();
+  };
 }
 
 /** Confirmación del operario antes de verificar su columna: dice qué
