@@ -23,9 +23,9 @@
     --viernes-suave: #f1ebfb;
     --viernes-borde: #d9c9f3;
     /* Casilla DOMINGO (igual que VIERNES, en verde azulado) */
-    --domingo: #0f7f7a;
-    --domingo-suave: #e3f4f2;
-    --domingo-borde: #b5dfda;
+    --domingo: #b8437a;
+    --domingo-suave: #fbeaf2;
+    --domingo-borde: #efc3d8;
     --danger: #c94f4f;
     --radius: 10px;
     --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -2309,7 +2309,7 @@
   /* Casilla DOMINGO: igual que VIERNES. */
   table.conteo th.th-domingo { background: var(--domingo-suave); color: var(--domingo); }
   table.conteo input.celda-domingo { background: var(--domingo-suave); border-color: var(--domingo-borde); color: var(--domingo); font-weight: 800; }
-  table.conteo input.celda-domingo:focus { border-color: var(--domingo); box-shadow: 0 0 0 3px rgba(15,127,122,.14); }
+  table.conteo input.celda-domingo:focus { border-color: var(--domingo); box-shadow: 0 0 0 3px rgba(184,67,122,.14); }
   table.conteo .celda-domingo-excluida {
     width: 52px; margin: 0 auto; padding: 7px 4px; text-align: center; border-radius: 7px; font-weight: 800;
     font-size: 13px; color: #fff; background: #8b9098; border: 1.5px solid #7a7f87; cursor: not-allowed;
