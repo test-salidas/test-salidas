@@ -56,3 +56,31 @@ let SESSION_NAVE = null;
 // hace falta mostrarlo o compararlo (p.ej. en la pantalla de Usuarios, para
 // no dejar que alguien se desactive/borre a sí mismo). También en memoria.
 let SESSION_USUARIO = null;
+
+/* ---------------- ENTORNO DE DESARROLLO (beta) ----------------
+ * La misma copia del código sirve para producción y para la beta
+ * (test-salidas.github.io): se distingue por la dirección desde la que se
+ * abre. En la beta (y en local) no se exige instalar la app y se marca
+ * "DESARROLLO" en el login y en la cabecera, para no confundirla con la
+ * de verdad. En producción no cambia nada. */
+const ES_DESARROLLO = /(^|\.)test-salidas\./i.test(location.hostname) ||
+  location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+if (ES_DESARROLLO) {
+  document.documentElement.classList.add('modo-desarrollo');
+  document.title = 'DESARROLLO · ' + document.title;
+  const pantallaLogin_ = document.getElementById('login-screen');
+  if (pantallaLogin_) {
+    const cartel = document.createElement('div');
+    cartel.className = 'desarrollo-cartel';
+    cartel.innerHTML = '<b>DESARROLLO</b><span>Versión de pruebas · no es la app de producción</span>';
+    pantallaLogin_.appendChild(cartel);
+  }
+  const marca_ = document.querySelector('header.topbar .brand');
+  if (marca_) {
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'desarrollo-etiqueta';
+    etiqueta.textContent = 'DESARROLLO';
+    marca_.appendChild(etiqueta);
+  }
+}

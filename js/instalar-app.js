@@ -16,6 +16,12 @@
 
   if (!overlay || !btnInstalar || !btnYaInstalada) return;
 
+  // En la beta (test-salidas) no se exige instalar la app (ver ES_DESARROLLO en js/config.js).
+  if (typeof ES_DESARROLLO !== 'undefined' && ES_DESARROLLO) {
+    overlay.classList.remove('show');
+    return;
+  }
+
   // Chrome/Edge (escritorio o Android) disparan este evento cuando la app
   // cumple los requisitos para instalarse (manifest + service worker +
   // HTTPS). Se guarda para lanzarlo al pulsar el botón (solo se puede
