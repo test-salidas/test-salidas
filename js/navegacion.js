@@ -31,6 +31,8 @@ function irAAgrupacionDesdeInicio_(fecha, nombreRuta) {
  *  scroll automáticamente en cuanto termine de cargar el día (ver
  *  irAAgrupacionDesdeInicio_, que es quien la usa desde "Inicio"). */
 function cambiarVista(vista, seccion) {
+  // Al salir de la Hoja de notas se suelta el bloqueo de edición (si lo había).
+  if (ESTADO.vista === 'almacen' && typeof hnSalirEdicion_ === 'function') hnSalirEdicion_();
   ESTADO.vista = vista;
   document.querySelectorAll('.topbar-nav-item').forEach(function (btn) {
     btn.classList.toggle('activa', btn.dataset.vista === vista);

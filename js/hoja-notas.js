@@ -31,7 +31,104 @@ const HN_DIAS = [
 ];
 const HN_NAVES = ['GAITE', 'PTA'];
 
-let HN = { dia: null, nave: null, datos: null, editar: false, filtro: '', peticion: 0 };
+let HN = { dia: null, nave: null, datos: null, editar: false, filtro: '', peticion: 0, latido: null, bloqueoDe: null, vigia: null };
+
+/* ---------------- BLOQUEO DE EDICIÓN ----------------
+ * Solo una persona puede editar a la vez cada hoja (día + nave). Al pulsar
+ * "Editar" se pide el bloqueo (hoja_notas_bloqueo 'tomar'); mientras se
+ * edita se renueva cada 40 s; al terminar, cambiar de día/nave o salir de
+ * la pantalla se suelta. Si la app se cierra sin soltarlo, caduca solo a
+ * los 2 minutos. El servidor rechaza cualquier cambio en una hoja que
+ * tenga bloqueada otra persona. Un administrador puede quitar el bloqueo. */
+const HN_LATIDO_MS = 40000;
+
+function hnBloqueo_(accion, dia, nave) {
+  return hnRpc_('hoja_notas_bloqueo', { p_dia: dia || HN.dia, p_nave: nave || HN.nave, p_accion: accion });
+}
+
+function hnEntrarEdicion_(forzar) {
+  const btn = document.getElementById('hn-btn-editar');
+  if (btn) btn.disabled = true;
+  hnBloqueo_(forzar ? 'forzar' : 'tomar')
+    .then(function (r) {
+      if (btn) btn.disabled = false;
+      if (!r || !r.ok) { hnModalBloqueada_(r || {}); return; }
+      HN.editar = true;
+      HN.bloqueoDe = { dia: HN.dia, nave: HN.nave };
+      clearInterval(HN.latido);
+      HN.latido = setInterval(hnLatido_, HN_LATIDO_MS);
+      // Se recarga para editar sobre lo último guardado.
+      hnCargar_(true);
+    })
+    .catch(function (err) { if (btn) btn.disabled = false; mostrarErrorServidor(err); });
+}
+
+/** Suelta el bloqueo (si se tenía) y sale del modo editar. */
+function hnSalirEdicion_() {
+  clearInterval(HN.latido);
+  HN.latido = null;
+  const de = HN.bloqueoDe;
+  HN.bloqueoDe = null;
+  HN.editar = false;
+  if (de) hnBloqueo_('soltar', de.dia, de.nave).catch(function () { /* caduca solo */ });
+}
+
+function hnLatido_() {
+  if (!HN.editar || !HN.bloqueoDe) { clearInterval(HN.latido); return; }
+  if (!document.getElementById('hn-hoja')) { hnSalirEdicion_(); return; }
+  hnBloqueo_('renovar', HN.bloqueoDe.dia, HN.bloqueoDe.nave)
+    .then(function (r) {
+      if (r && r.ok) return;
+      clearInterval(HN.latido);
+      HN.latido = null;
+      HN.bloqueoDe = null;
+      HN.editar = false;
+      cerrarModal();
+      hnCargar_(true);
+      appConfirm('Ya no estás editando', (r && r.por ? r.por + ' ha tomado' : 'Otra persona ha tomado') +
+        ' la edición de esta hoja. Lo que no hubieras guardado no se ha guardado.', function () {});
+    })
+    .catch(function () { /* sin conexión: se reintenta en el siguiente latido */ });
+}
+
+function hnModalBloqueada_(r) {
+  const desde = r.desde ? hnFechaHora_(r.desde).split(' ')[1] : '';
+  const cuerpo =
+    '<div class="hn-bloqueada">' +
+      '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' +
+      '<div><b>' + escapeHtml(r.por || 'Otra persona') + '</b> está editando la hoja de ' +
+        escapeHtml(HN.nave + ' · ' + hnDiaLargo_(HN.dia)) + (desde ? ' desde las ' + escapeHtml(desde) : '') + '.' +
+        '<br>Podrás editarla cuando termine. Mientras tanto puedes verla e imprimirla.</div>' +
+    '</div>';
+  hnAbrirModal_('Hoja bloqueada', cuerpo,
+    (esAdmin() ? '<button class="modal-cancel hn-btn-forzar" id="hn-forzar-btn">Quitar su bloqueo y editar</button>' : '') +
+    '<button class="modal-confirm" id="modal-cancel-btn">Entendido</button>');
+  const f = document.getElementById('hn-forzar-btn');
+  if (f) {
+    f.onclick = function () {
+      cerrarModal();
+      appConfirm('Quitar bloqueo', 'Se quitará la edición a ' + (r.por || 'la otra persona') + '. Lo que tenga sin guardar en ese momento no se guardará.', function () {
+        hnEntrarEdicion_(true);
+      }, true);
+    };
+  }
+}
+
+/** Mientras otra persona edita la hoja que se está viendo, se refresca
+ *  sola cada minuto (para ver sus cambios y saber cuándo queda libre). */
+function hnVigilar_() {
+  clearInterval(HN.vigia);
+  HN.vigia = null;
+  const b = HN.datos && HN.datos.bloqueo;
+  if (HN.editar || !b || b.mio) return;
+  HN.vigia = setInterval(function () {
+    if (!document.getElementById('hn-hoja')) { clearInterval(HN.vigia); return; }
+    if (HN.editar || document.getElementById('modal-overlay').style.display === 'flex') return;
+    hnCargar_(true);
+  }, 60000);
+}
+
+window.addEventListener('pagehide', function () { if (HN.editar) hnSalirEdicion_(); });
 
 function hnDiaLargo_(id) {
   const d = HN_DIAS.find(function (x) { return x.id === id; });
@@ -63,7 +160,7 @@ function renderAlmacenHojaNotas() {
   if (!cont) return;
   if (!HN.dia) HN.dia = hnDiaPorDefecto_();
   if (!HN.nave) HN.nave = hnNavePorDefecto_();
-  HN.editar = false;
+  hnSalirEdicion_();
   HN.filtro = '';
   HN.datos = null;
 
@@ -105,15 +202,15 @@ function renderAlmacenHojaNotas() {
     '</div>';
 
   document.querySelectorAll('#hn-dias button').forEach(function (b) {
-    b.onclick = function () { if (HN.dia !== b.dataset.dia) { HN.dia = b.dataset.dia; hnCargar_(); } };
+    b.onclick = function () { if (HN.dia !== b.dataset.dia) { hnSalirEdicion_(); HN.dia = b.dataset.dia; hnCargar_(); } };
   });
   document.querySelectorAll('#hn-naves button').forEach(function (b) {
-    b.onclick = function () { if (HN.nave !== b.dataset.nave) { HN.nave = b.dataset.nave; hnCargar_(); } };
+    b.onclick = function () { if (HN.nave !== b.dataset.nave) { hnSalirEdicion_(); HN.nave = b.dataset.nave; hnCargar_(); } };
   });
   document.getElementById('hn-btn-imprimir').onclick = hnImprimir_;
   document.getElementById('hn-btn-editar').onclick = function () {
-    HN.editar = !HN.editar;
-    hnPintar_();
+    if (HN.editar) { hnSalirEdicion_(); hnCargar_(true); }
+    else hnEntrarEdicion_(false);
   };
   document.getElementById('hn-btn-festivos').onclick = hnModalFestivos_;
   document.getElementById('hn-btn-copiar').onclick = hnModalCopiar_;
@@ -143,8 +240,9 @@ function hnCargar_(silencioso) {
     .then(function (datos) {
       if (id !== HN.peticion) return;
       HN.datos = datos;
-      if (!datos.puedeEditar) HN.editar = false;
+      if (!datos.puedeEditar && HN.editar) hnSalirEdicion_();
       hnPintar_();
+      hnVigilar_();
     })
     .catch(function (err) {
       if (id !== HN.peticion) return;
@@ -197,8 +295,17 @@ function hnPintarAvisos_() {
   const cont = document.getElementById('hn-avisos');
   if (!cont) return;
   const d = HN.datos;
-  if (!d.puedeEditar) { cont.innerHTML = ''; return; }
   let html = '';
+  if (d.bloqueo && !d.bloqueo.mio) {
+    html +=
+      '<div class="hn-aviso hn-aviso-editando">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' +
+        '<span><b>' + escapeHtml(d.bloqueo.por || 'Otra persona') + '</b> está editando esta hoja' +
+        (d.bloqueo.desde ? ' desde las ' + escapeHtml(hnFechaHora_(d.bloqueo.desde).split(' ')[1]) : '') +
+        '. Se actualiza sola cada minuto.</span>' +
+      '</div>';
+  }
+  if (!d.puedeEditar) { cont.innerHTML = html; return; }
   const nuevas = d.sinColocar || [];
   if (nuevas.length) {
     html +=
@@ -227,9 +334,17 @@ function hnPintarAvisos_() {
   cont.innerHTML = html;
   cont.querySelectorAll('[data-colocar]').forEach(function (b) {
     b.onclick = function () {
-      HN.editar = true;
-      hnPintar_();
-      hnModalLinea_(null, null, Number(b.dataset.colocar));
+      const num = Number(b.dataset.colocar);
+      if (HN.editar) { hnModalLinea_(null, null, num); return; }
+      hnBloqueo_('tomar').then(function (r) {
+        if (!r || !r.ok) { hnModalBloqueada_(r || {}); return; }
+        HN.editar = true;
+        HN.bloqueoDe = { dia: HN.dia, nave: HN.nave };
+        clearInterval(HN.latido);
+        HN.latido = setInterval(hnLatido_, HN_LATIDO_MS);
+        hnPintar_();
+        hnModalLinea_(null, null, num);
+      }).catch(mostrarErrorServidor);
     };
   });
   const btnBajas = document.getElementById('hn-quitar-bajas');

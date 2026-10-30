@@ -4724,3 +4724,10 @@ header.topbar .brand.abre-acerca-de:hover{ opacity:.85; }
     .hn-print .hn-c-hora { width: 26px; } .hn-print .hn-c-age { width: 28px; } .hn-print .hn-c-pob { width: 72px; }
     .hn-print .hn-c-planta { width: 92px; } .hn-print .hn-c-ref { width: 110px; } .hn-print .hn-c-x { width: 16px; }
   }
+
+  /* Hoja de notas: bloqueo de edición */
+  .hn-aviso-editando { display: flex; align-items: center; gap: 8px; background: #fceded; border: 1px solid #f2c4c4; color: #8a2a2a; }
+  .hn-aviso-editando svg { flex-shrink: 0; }
+  .hn-bloqueada { display: flex; gap: 14px; align-items: flex-start; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+  .hn-bloqueada svg { color: var(--danger); flex-shrink: 0; margin-top: 2px; }
+  .hn-btn-forzar { color: var(--danger) !important; }
