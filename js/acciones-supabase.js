@@ -105,6 +105,12 @@ const SUPABASE_ACCIONES_ = {
   // Candado de la cabecera (solo administradores): desbloquea el conteo
   // bloqueado por la carga ajustada o la previsión enviada. Borra la carga
   // ajustada si la hay y devuelve la carga vigente (con desbloqueada: true).
+  // Matrícula/remolque de los camiones con el definitivo ya enviado (no toca palets).
+  guardarMatriculasDefinitivo: function (args) {
+    return llamarRpcSupabase_('guardar_matriculas_definitivo', {
+      p_dia: args[0], p_nombre_ruta: args[1], p_fecha: args[2], p_camiones: args[3]
+    });
+  },
   desbloquearCarga: function (args) {
     const dia = args[0], nombreAgrupacion = args[1], fecha = args[2];
     return llamarRpcSupabase_('desbloquear_carga', { p_dia: dia, p_nombre_ruta: nombreAgrupacion, p_fecha: fecha });
@@ -159,10 +165,12 @@ const SUPABASE_ACCIONES_ = {
   // -- Supabase: resumen de la pantalla de Inicio (estado del conteo de
   // hoy y de mañana) --
   resumenInicio: function () {
-    // v2: el check de cada nave se pone en verde cuando esa nave ha
-    // VERIFICADO su columna (naranja = hay datos sin verificar). La
-    // versión anterior (get_resumen_inicio) se deja intacta en Supabase.
-    return llamarRpcSupabase_('get_resumen_inicio_v2', {});
+    // v3: mismos checks que v2 (verde = la nave ha VERIFICADO su
+    // columna), pero el estado de la ruta sigue el flujo de la carga:
+    // Pendiente / En progreso / Carga sin ajustar / Carga ajustada /
+    // Previsión enviada / Definitivo enviado. Las versiones anteriores
+    // (get_resumen_inicio y _v2) se dejan intactas en Supabase.
+    return llamarRpcSupabase_('get_resumen_inicio_v3', {});
   },
   // -- Supabase: Configuración agencias (Config_Agrupaciones) --
   getAgrupacionesConfig: function () {
@@ -567,6 +575,16 @@ const SUPABASE_ACCIONES_ = {
       p_texto: String(args[1] == null ? '' : args[1]).toUpperCase()
     });
   },
+  // Editar una nota cambiando también dónde sale: del día (agrupación vacía)
+  // o de una agrupación concreta. args: [id, texto, agrupacion, dia]
+  editarNotaObservacion: function (args) {
+    return llamarRpcSupabase_('editar_nota_observacion', {
+      p_id: args[0],
+      p_texto: String(args[1] == null ? '' : args[1]).toUpperCase(),
+      p_agrupacion: args[2] || '',
+      p_dia: args[3] || ''
+    });
+  },
   eliminarObservacion: function (args) {
     return llamarRpcSupabase_('eliminar_observacion', { p_id: args[0] });
   },
@@ -591,6 +609,10 @@ const SUPABASE_ACCIONES_ = {
   },
   eliminarExcepcionTienda: function (args) {
     return llamarRpcSupabase_('eliminar_excepcion_tienda', { p_id: args[0] });
+  },
+  // -- Supabase: Administración: Registro de actividad (solo admin) --
+  getRegistroActividad: function (args) {
+    return llamarRpcSupabase_('get_registro_actividad', { p_desde: args[0], p_hasta: args[1] });
   },
   // -- Supabase: Administración: Palets forzados --
   getPaletsForzadosAdmin: function (args) {

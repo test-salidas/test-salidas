@@ -15,7 +15,7 @@
  * cambian al insertar/borrar/mover, así que no se puede hacer una
  * actualización optimista local como en "Gestión festivos").
  */
-let PLANTILLA_ESTADO = { dias: [], dia: null, secciones: [], especiales: [], verEspecialesPasados: false, puntuales: [] };
+let PLANTILLA_ESTADO = { dias: [], dia: null, secciones: [], especiales: [], verEspecialesPasados: false, pasadosTodos: false, puntuales: [] };
 
 
 /** Busca en el caché local (PLANTILLA_ESTADO.secciones) la tienda con ese
@@ -98,6 +98,7 @@ function renderConfigPlantilla() {
     '<div class="vista-card">' +
       '<div class="vista-card-header">' +
         '<h2>Rutas y tiendas</h2>' +
+        '<div class="vista-card-header-acciones" id="plantilla-header-acciones"></div>' +
       '</div>' +
       '<p>Configuración de todas las rutas y tiendas de cada hoja de conteo por días.</p>' +
       '<div class="emails-config-solo-lectura">' +
@@ -143,20 +144,28 @@ function pintarDiasPlantilla_() {
   const botonesDias = PLANTILLA_ESTADO.dias.map(function (d) {
     return '<button type="button" class="' + (d === PLANTILLA_ESTADO.dia ? 'activo' : '') + '" data-dia="' + escapeAttr(d) + '">' + escapeHtml(d) + '</button>';
   }).join('');
-  // Días especiales: los de hoy en adelante siempre se ven; los pasados,
-  // solo al pulsar "Pasados" (o si es el que está seleccionado).
+  // Días especiales: los de hoy en adelante siempre se ven en la fila; los
+  // pasados NUNCA se sueltan en la fila (con muchos la ensuciarían): se
+  // eligen en el desplegable "Pasados (n)", y solo el que se está viendo
+  // sale como pestaña mientras está abierto.
   const especiales = PLANTILLA_ESTADO.especiales || [];
   const pasados = especiales.filter(function (e) { return e.pasado; });
   const visibles = especiales.filter(function (e) {
-    return !e.pasado || PLANTILLA_ESTADO.verEspecialesPasados || e.nombre === PLANTILLA_ESTADO.dia;
+    return !e.pasado || e.nombre === PLANTILLA_ESTADO.dia;
   });
   const botonesEspeciales = visibles.map(function (e) {
     return '<button type="button" class="dia-especial' + (e.pasado ? ' pasado' : '') + (e.nombre === PLANTILLA_ESTADO.dia ? ' activo' : '') + '" data-dia="' + escapeAttr(e.nombre) + '" title="Conteo especial del ' + escapeAttr(formatearFechaLarga(e.fecha)) + '">' +
       'ESP. ' + escapeHtml(fechaCortaEspecial_(e.fecha)) + '</button>';
   }).join('');
   const botonPasados = pasados.length
-    ? '<button type="button" class="dia-especial-pasados" id="btn-plantilla-especiales-pasados">' +
-        (PLANTILLA_ESTADO.verEspecialesPasados ? 'Ocultar pasados' : 'Pasados (' + pasados.length + ')') + '</button>'
+    ? '<span class="especiales-pasados-wrap">' +
+        '<button type="button" class="dia-especial-pasados' + (PLANTILLA_ESTADO.verEspecialesPasados ? ' abierto' : '') + '" id="btn-plantilla-especiales-pasados" aria-haspopup="true" aria-expanded="' + (PLANTILLA_ESTADO.verEspecialesPasados ? 'true' : 'false') + '">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>' +
+          'Pasados (' + pasados.length + ')' +
+          '<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
+        '</button>' +
+        (PLANTILLA_ESTADO.verEspecialesPasados ? menuEspecialesPasadosHtml_(pasados) : '') +
+      '</span>'
     : '';
   const botonNuevoEspecial = tienePermiso('plantilla')
     ? '<button type="button" class="dia-especial-nuevo" id="btn-plantilla-nuevo-especial" title="Crear una plantilla especial para una fecha concreta">' +
@@ -166,11 +175,17 @@ function pintarDiasPlantilla_() {
   cont.innerHTML =
     '<div class="plantilla-dias">' + botonesDias +
       (botonesEspeciales || botonNuevoEspecial || botonPasados ? '<span class="plantilla-dias-sep"></span>' : '') +
-      botonesEspeciales + botonPasados + botonNuevoEspecial +
+      botonesEspeciales + botonNuevoEspecial + botonPasados +
     '</div>' +
     (PLANTILLA_ESTADO.dia ? buscadoresPlantillaHtml_() : '') +
-    (tienePermiso('plantilla') && PLANTILLA_ESTADO.dia ? botonAnadirRutaPlantillaHtml_() : '') +
     avisoDiaEspecialPlantillaHtml_();
+  // "Añadir ruta nueva" va arriba a la derecha de la tarjeta, junto al
+  // título (como los botones de acción del resto de pantallas), y no en
+  // la fila de días, que así queda solo para días y buscador.
+  const accionesHeader = document.getElementById('plantilla-header-acciones');
+  if (accionesHeader) {
+    accionesHeader.innerHTML = (puedeEditarPlantilla_() && PLANTILLA_ESTADO.dia) ? botonAnadirRutaPlantillaHtml_() : '';
+  }
   cont.querySelectorAll('.plantilla-dias button[data-dia]').forEach(function (btn) {
     btn.onclick = function () {
       if (btn.getAttribute('data-dia') === PLANTILLA_ESTADO.dia) return;
@@ -180,10 +195,17 @@ function pintarDiasPlantilla_() {
     };
   });
   const btnPasados = document.getElementById('btn-plantilla-especiales-pasados');
-  if (btnPasados) btnPasados.onclick = function () {
+  if (btnPasados) btnPasados.onclick = function (ev) {
+    ev.stopPropagation();
     PLANTILLA_ESTADO.verEspecialesPasados = !PLANTILLA_ESTADO.verEspecialesPasados;
+    PLANTILLA_ESTADO.pasadosTodos = false;
     pintarDiasPlantilla_();
+    if (PLANTILLA_ESTADO.verEspecialesPasados) {
+      const inp = document.getElementById('especiales-pasados-buscar');
+      if (inp) inp.focus();
+    }
   };
+  bindMenuEspecialesPasados_();
   const btnNuevo = document.getElementById('btn-plantilla-nuevo-especial');
   if (btnNuevo) btnNuevo.onclick = abrirModalNuevoDiaEspecial_;
   const btnEliminarEsp = document.getElementById('btn-plantilla-eliminar-especial');
@@ -191,6 +213,101 @@ function pintarDiasPlantilla_() {
   const btnAnadirRuta = document.getElementById('btn-plantilla-anadir-ruta');
   if (btnAnadirRuta) btnAnadirRuta.onclick = anadirRutaPlantilla_;
   if (PLANTILLA_ESTADO.dia) inicializarBuscadoresPlantilla_();
+}
+
+/* ---------------- DESPLEGABLE "PASADOS (n)" ----------------
+ * Lista de conteos especiales ya pasados, del más reciente al más antiguo,
+ * agrupados por meses y con el día de la semana. Arriba un buscador por
+ * fecha ("28/10"). Se ven los 2 meses más recientes; el resto, con "Ver
+ * meses anteriores". Al elegir uno se abre en solo consulta, como antes. */
+function menuEspecialesPasadosHtml_(pasados) {
+  const lista = pasados.slice().sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
+  const meses = [];
+  lista.forEach(function (e) {
+    const clave = String(e.fecha).slice(0, 7);
+    let m = meses[meses.length - 1];
+    if (!m || m.clave !== clave) { m = { clave: clave, items: [] }; meses.push(m); }
+    m.items.push(e);
+  });
+  const MESES_VISIBLES = 2;
+  const ocultos = PLANTILLA_ESTADO.pasadosTodos ? 0 : meses.slice(MESES_VISIBLES).reduce(function (n, m) { return n + m.items.length; }, 0);
+  const html = meses.map(function (m, i) {
+    const p = m.clave.split('-');
+    const titulo = (MESES_ES[Number(p[1]) - 1] || '') + ' ' + p[0];
+    const ocultar = !PLANTILLA_ESTADO.pasadosTodos && i >= MESES_VISIBLES;
+    return '<div class="ep-mes"' + (ocultar ? ' data-ep-extra hidden' : '') + '>' +
+      '<div class="ep-mes-titulo">' + escapeHtml(titulo.toUpperCase()) + '</div>' +
+      m.items.map(function (e) {
+        const d = new Date(e.fecha + 'T12:00:00');
+        return '<button type="button" class="ep-item' + (e.nombre === PLANTILLA_ESTADO.dia ? ' activo' : '') + '" data-ep-dia="' + escapeAttr(e.nombre) + '" data-ep-buscar="' + escapeAttr(fechaCortaEspecial_(e.fecha) + ' ' + String(e.fecha)) + '">' +
+          '<b>ESP. ' + escapeHtml(fechaCortaEspecial_(e.fecha)) + '</b>' +
+          '<span>' + escapeHtml(DIAS_SEMANA_ES[d.getDay()]) + '</span>' +
+        '</button>';
+      }).join('') +
+    '</div>';
+  }).join('');
+  return '<div class="especiales-pasados-menu" role="menu">' +
+    '<div class="ep-buscar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' +
+      '<input type="text" id="especiales-pasados-buscar" placeholder="Buscar fecha… (ej. 28/10)" autocomplete="off"></div>' +
+    '<div class="ep-lista">' + html + '</div>' +
+    '<div class="ep-vacio" hidden>No hay ningún conteo especial pasado con esa fecha.</div>' +
+    (ocultos ? '<button type="button" class="ep-mas" id="especiales-pasados-mas">Ver meses anteriores (' + ocultos + ')</button>' : '') +
+  '</div>';
+}
+
+function bindMenuEspecialesPasados_() {
+  const menu = document.querySelector('.especiales-pasados-menu');
+  if (!menu) return;
+  menu.addEventListener('click', function (ev) { ev.stopPropagation(); });
+  menu.querySelectorAll('[data-ep-dia]').forEach(function (btn) {
+    btn.onclick = function () {
+      const dia = btn.getAttribute('data-ep-dia');
+      PLANTILLA_ESTADO.verEspecialesPasados = false;
+      if (dia === PLANTILLA_ESTADO.dia) { pintarDiasPlantilla_(); return; }
+      PLANTILLA_ESTADO.dia = dia;
+      pintarDiasPlantilla_();
+      cargarPlantilla_();
+    };
+  });
+  const mas = document.getElementById('especiales-pasados-mas');
+  if (mas) mas.onclick = function () {
+    PLANTILLA_ESTADO.pasadosTodos = true;
+    menu.querySelectorAll('[data-ep-extra]').forEach(function (m) { m.hidden = false; m.removeAttribute('data-ep-extra'); });
+    mas.remove();
+  };
+  // Buscador: filtra por "28/10" o "2026-10-28"; al buscar se mira en
+  // todos los meses (también los de "Ver meses anteriores").
+  const inp = document.getElementById('especiales-pasados-buscar');
+  const vacio = menu.querySelector('.ep-vacio');
+  if (inp) inp.oninput = function () {
+    const q = inp.value.trim().toLowerCase();
+    let alguno = false;
+    menu.querySelectorAll('.ep-mes').forEach(function (m) {
+      let enMes = false;
+      m.querySelectorAll('.ep-item').forEach(function (it) {
+        const ok = !q || it.getAttribute('data-ep-buscar').toLowerCase().indexOf(q) !== -1;
+        it.hidden = !ok;
+        if (ok) enMes = true;
+      });
+      m.hidden = q ? !enMes : m.hasAttribute('data-ep-extra');
+      if (!m.hidden) alguno = true;
+    });
+    if (vacio) vacio.hidden = alguno;
+    if (mas) mas.hidden = !!q;
+  };
+  // Se cierra al pulsar fuera o con Escape.
+  setTimeout(function () {
+    function cerrar() {
+      document.removeEventListener('click', cerrar);
+      document.removeEventListener('keydown', tecla);
+      if (!PLANTILLA_ESTADO.verEspecialesPasados) return;
+      PLANTILLA_ESTADO.verEspecialesPasados = false;
+      pintarDiasPlantilla_();
+    }
+    function tecla(ev) { if (ev.key === 'Escape') cerrar(); }
+    document.addEventListener('click', cerrar);
+    document.addEventListener('keydown', tecla);
+  }, 0);
 }
 
 /* ---------------- DÍAS ESPECIALES ----------------
@@ -212,6 +329,16 @@ function fechaCortaEspecial_(fecha) {
   return p.length === 3 ? p[2] + '/' + p[1] : String(fecha || '');
 }
 
+/** true si se puede editar el día que se está viendo en "Rutas y tiendas":
+ *  hace falta permiso de plantilla y, además, que no sea un conteo
+ *  especial ya pasado (esos quedan solo para consulta, para no cambiar
+ *  lo que ya se usó ese día). */
+function puedeEditarPlantilla_() {
+  if (!tienePermiso('plantilla')) return false;
+  const e = especialPlantilla_(PLANTILLA_ESTADO.dia);
+  return !(e && e.pasado);
+}
+
 /** Franja informativa bajo la fila de días cuando el seleccionado es especial. */
 function avisoDiaEspecialPlantillaHtml_() {
   const e = especialPlantilla_(PLANTILLA_ESTADO.dia);
@@ -220,8 +347,10 @@ function avisoDiaEspecialPlantillaHtml_() {
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>' +
     '<span><b>Conteo especial</b> del ' + escapeHtml(formatearFechaLarga(e.fecha)) +
       (e.diaBase ? ' · copiado de ' + escapeHtml(e.diaBase) : '') +
-      '. Lo que cambies aquí solo afecta a ese día.</span>' +
-    (tienePermiso('plantilla') && !e.pasado
+      (e.pasado
+        ? '. Ya ha pasado: solo se puede consultar, no editar.</span>'
+        : '. Lo que cambies aquí solo afecta a ese día.</span>') +
+    (puedeEditarPlantilla_() && !e.pasado
       ? '<button type="button" class="plantilla-aviso-especial-eliminar" id="btn-plantilla-eliminar-especial">Eliminar conteo especial</button>'
       : '') +
   '</div>';
@@ -327,10 +456,10 @@ function abrirModalNuevoDiaEspecial_() {
 function confirmarEliminarDiaEspecial_(nombre) {
   const e = especialPlantilla_(nombre);
   if (!e) return;
-  appConfirm(
-    'Eliminar conteo especial',
-    '¿Seguro que quieres eliminar el conteo especial del ' + formatearFechaLarga(e.fecha) + '? Ese día volverá a usar la plantilla normal de ' + diaNormalDeFecha_(e.fecha) + '.',
-    function () {
+  appConfirmDeslizando({
+    titulo: 'Eliminar conteo especial',
+    texto: '¿Seguro que quieres eliminar el conteo especial del ' + formatearFechaLarga(e.fecha) + '? Ese día volverá a usar la plantilla normal de ' + diaNormalDeFecha_(e.fecha) + '.',
+    onConfirmar: function () {
       llamarApi_('eliminarDiaEspecial', [nombre])
         .then(function () {
           mostrarToast('Conteo especial eliminado');
@@ -342,20 +471,18 @@ function confirmarEliminarDiaEspecial_(nombre) {
           if (listaEl) listaEl.innerHTML = '<div class="festivos-vacio">Elige un día arriba para ver y editar sus rutas.</div>';
         })
         .catch(mostrarErrorServidor);
-    },
-    true
-  );
+    }
+  });
 }
 
-/** HTML de los dos buscadores de "Rutas y tiendas" (agrupación y tienda):
- *  viven juntos en la fila de días (misma línea que LUNES/MARTES...), que
- *  es "sticky", así que se mantienen visibles al hacer scroll. Cada uno
- *  busca SOLO dentro del día seleccionado. */
+/** HTML del buscador de "Rutas y tiendas": uno solo para agrupaciones y
+ *  tiendas. Vive en la fila de días (misma línea que LUNES/MARTES...), que
+ *  es "sticky", así que se mantiene visible al hacer scroll. Busca SOLO
+ *  dentro del día seleccionado. */
 function buscadoresPlantillaHtml_() {
   return (
     '<div class="plantilla-buscadores">' +
-      buscadorInputPlantillaHtml_('plantilla-buscador-wrap', 'plantilla-buscador-input', 'plantilla-buscador-resultados', 'Buscar agrupación…') +
-      buscadorInputPlantillaHtml_('plantilla-buscador-tienda-wrap', 'plantilla-buscador-tienda-input', 'plantilla-buscador-tienda-resultados', 'Buscar tienda…') +
+      buscadorInputPlantillaHtml_('plantilla-buscador-wrap', 'plantilla-buscador-input', 'plantilla-buscador-resultados', 'Buscar agrupación o tienda…') +
     '</div>'
   );
 }
@@ -450,13 +577,12 @@ function inicializarBuscadoresPlantilla_() {
     document.addEventListener('click', cerrarDesplegablesBuscadorPlantilla_);
   }
 
+  // Un solo buscador: primero las agrupaciones que coinciden y debajo las
+  // tiendas (con su agrupación a la derecha).
   inicializarBuscadorGenericoPlantilla_('plantilla-buscador-input', 'plantilla-buscador-resultados', function (q) {
-    return PLANTILLA_ESTADO.secciones
+    const agrupaciones = PLANTILLA_ESTADO.secciones
       .filter(function (s) { return normalizarBusquedaPlantilla_(s.nombre).indexOf(q) !== -1; })
-      .slice(0, 8);
-  }, pintarResultadosBuscadorAgrupacionPlantilla_);
-
-  inicializarBuscadorGenericoPlantilla_('plantilla-buscador-tienda-input', 'plantilla-buscador-tienda-resultados', function (q) {
+      .slice(0, 6);
     const encontradas = [];
     PLANTILLA_ESTADO.secciones.forEach(function (s) {
       s.tiendas.forEach(function (t) {
@@ -471,8 +597,8 @@ function inicializarBuscadoresPlantilla_() {
         encontradas.push({ tienda: t, ruta: s.nombre });
       });
     });
-    return encontradas.slice(0, 8);
-  }, pintarResultadosBuscadorTiendaPlantilla_);
+    return { agrupaciones: agrupaciones, tiendas: encontradas.slice(0, 8) };
+  }, pintarResultadosBuscadorPlantilla_);
 }
 
 /** Base común de un buscador con desplegable: al escribir, filtra con
@@ -498,49 +624,43 @@ function inicializarBuscadorGenericoPlantilla_(inputId, resultadosId, filtroFn, 
   });
 }
 
-/** Pinta la lista desplegable de coincidencias del buscador de agrupaciones
- *  (siempre del día activo). */
-function pintarResultadosBuscadorAgrupacionPlantilla_(secciones, resultadosEl) {
-  if (!secciones.length) {
+/** Pinta el desplegable del buscador único de "Rutas y tiendas":
+ *  agrupaciones (con su nº de tiendas) y debajo tiendas (con su ruta).
+ *  res: { agrupaciones: [...secciones], tiendas: [{ tienda, ruta, puntualId }] } */
+function pintarResultadosBuscadorPlantilla_(res, resultadosEl) {
+  const secciones = res.agrupaciones || [];
+  const encontradas = res.tiendas || [];
+  if (!secciones.length && !encontradas.length) {
     resultadosEl.innerHTML = '<div class="plantilla-buscador-vacio">Sin coincidencias.</div>';
     resultadosEl.style.display = 'block';
     return;
   }
-  resultadosEl.innerHTML = secciones.map(function (s) {
+  const htmlAgrupaciones = secciones.map(function (s) {
     const titulo = parsearNombreAgrupacion(s.nombre).titulo;
     return '<button type="button" class="plantilla-buscador-item" data-ruta="' + escapeAttr(s.nombre) + '">' +
       '<span class="nombre">' + escapeHtml(titulo) + '</span>' +
       '<span class="dia-tag">' + s.tiendas.length + (s.tiendas.length === 1 ? ' tienda' : ' tiendas') + '</span>' +
     '</button>';
   }).join('');
-  resultadosEl.style.display = 'block';
-  resultadosEl.querySelectorAll('.plantilla-buscador-item').forEach(function (btn) {
-    btn.onclick = function () { irAAgrupacionPlantilla_(btn.getAttribute('data-ruta'), resultadosEl); };
-  });
-}
-
-/** Pinta la lista desplegable de coincidencias del buscador de tiendas,
- *  con el nombre de la ruta a la que pertenece cada una a la derecha. */
-function pintarResultadosBuscadorTiendaPlantilla_(encontradas, resultadosEl) {
-  if (!encontradas.length) {
-    resultadosEl.innerHTML = '<div class="plantilla-buscador-vacio">Sin coincidencias.</div>';
-    resultadosEl.style.display = 'block';
-    return;
-  }
-  resultadosEl.innerHTML = encontradas.map(function (it) {
+  const htmlTiendas = encontradas.map(function (it) {
     const tituloRuta = parsearNombreAgrupacion(it.ruta).titulo;
     return '<button type="button" class="plantilla-buscador-item" data-tienda-row="' + it.tienda.row + '"' + (it.puntualId ? ' data-puntual-id="' + escapeAttr(it.puntualId) + '"' : '') + '>' +
       '<span class="nombre">' + escapeHtml(it.tienda.nombre) + '</span>' +
       '<span class="dia-tag">' + escapeHtml(tituloRuta) + (it.puntualId ? ' · puntual' : '') + '</span>' +
     '</button>';
   }).join('');
+  resultadosEl.innerHTML =
+    (htmlAgrupaciones ? '<div class="plantilla-buscador-grupo">Agrupaciones</div>' + htmlAgrupaciones : '') +
+    (htmlTiendas ? '<div class="plantilla-buscador-grupo">Tiendas</div>' + htmlTiendas : '');
   resultadosEl.style.display = 'block';
   resultadosEl.querySelectorAll('.plantilla-buscador-item').forEach(function (btn) {
     btn.onclick = function () {
+      const ruta = btn.getAttribute('data-ruta');
+      if (ruta) { irAAgrupacionPlantilla_(ruta, resultadosEl); return; }
       const puntualId = btn.getAttribute('data-puntual-id');
       if (puntualId) {
         resultadosEl.style.display = 'none';
-        const input = document.getElementById('plantilla-buscador-tienda-input');
+        const input = document.getElementById('plantilla-buscador-input');
         if (input) { input.value = ''; input.blur(); }
         resaltarFilaPlantilla_(document.querySelector('.plantilla-tienda[data-puntual-id="' + CSS.escape(puntualId) + '"]'));
         return;
@@ -563,7 +683,7 @@ function irAAgrupacionPlantilla_(nombreRuta, resultadosEl) {
  *  "row" físico, único dentro del día). */
 function irATiendaPlantilla_(row, resultadosEl) {
   resultadosEl.style.display = 'none';
-  const input = document.getElementById('plantilla-buscador-tienda-input');
+  const input = document.getElementById('plantilla-buscador-input');
   if (input) { input.value = ''; input.blur(); }
   resaltarTiendaPlantilla_(row);
 }
@@ -613,9 +733,49 @@ function dividirNombreTiendaPlantilla_(nombre) {
 function botonBloqueoPlantillaHtml_(t, campo, etiqueta) {
   const bloqueado = campo === 'c60' ? t.bloqueo60 : (campo === 'pta' ? t.bloqueoPta : t.bloqueoCart);
   const titulo = bloqueado
-    ? 'Quitar el bloqueo "NO" de ' + etiqueta + ' en esta tienda'
-    : 'Bloquear la casilla ' + etiqueta + ' en los conteos';
-  return '<button type="button" class="plantilla-tienda-bloqueo' + (bloqueado ? ' activo' : '') + '" data-bloqueo-row="' + t.row + '" data-bloqueo-campo="' + campo + '" data-bloqueo-activo="' + (bloqueado ? '1' : '0') + '" title="' + titulo + '"' + (tienePermiso('plantilla') ? '' : ' disabled') + '>' + etiqueta + '</button>';
+    ? etiqueta + ' bloqueada para esta tienda (sale "NO" en el conteo). Pulsa para desbloquear'
+    : etiqueta + ' carga para esta tienda. Pulsa para bloquearla en los conteos';
+  const candado = bloqueado
+    ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+    : '';
+  return '<button type="button" class="plantilla-tienda-bloqueo' + (bloqueado ? ' activo' : '') + '" data-bloqueo-row="' + t.row + '" data-bloqueo-campo="' + campo + '" data-bloqueo-activo="' + (bloqueado ? '1' : '0') + '" title="' + titulo + '"' + (puedeEditarPlantilla_() ? '' : ' disabled') + '>' + candado + etiqueta + '</button>';
+}
+
+/** Franja bajo la cabecera de cada ruta con los interruptores de la
+ *  ruta (PESO, C.EXPRESS, SOBRESTOCK, VIERNES, DOMINGO, PDF ESPECIAL).
+ *  Antes iban mezclados con los botones de acción (Orden retirada,
+ *  Grupos de palets, Añadir tienda); ahora van aparte, con un check
+ *  cuando están activos. Sin permiso de edición se ven, pero no se pulsan. */
+function opcionesRutaPlantillaHtml_(s) {
+  const editable = puedeEditarPlantilla_();
+  const nombre = escapeAttr(s.nombre);
+  const check = '<svg class="chk" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const chip = function (clase, atributo, activo, etiqueta, tituloOn, tituloOff) {
+    return '<button type="button" class="plantilla-chip ' + clase + (activo ? ' activo' : '') + '" data-toggle-' + atributo + '="' + nombre + '" data-' + atributo + '-activo="' + (activo ? '1' : '0') + '" title="' + escapeAttr(activo ? tituloOn : tituloOff) + '"' + (editable ? '' : ' disabled') + '>' +
+      (activo ? check : '') + etiqueta + '</button>';
+  };
+  return '<div class="plantilla-ruta-opciones">' +
+    '<span class="plantilla-ruta-opciones-label">Activar en esta ruta:</span>' +
+    chip('chip-azul', 'peso', s.tienePeso, 'PESO', 'Quitar la casilla PESO de esta ruta', 'Activar la casilla PESO en el conteo de esta ruta') +
+    chip('chip-azul', 'cexpress', s.tieneCExpress, 'C.EXPRESS', 'Quitar la casilla C.EXPRESS de esta ruta', 'Activar la casilla C.EXPRESS en el conteo de esta ruta') +
+    chip('chip-azul', 'sobrestock', s.tieneSobrestock, 'SOBRESTOCK', 'Quitar la casilla SOBRESTOCK de esta ruta', 'Activar la casilla SOBRESTOCK en el conteo de esta ruta') +
+    chip('chip-viernes', 'viernes', s.tieneViernes, 'VIERNES', 'Quitar la casilla VIERNES de esta ruta', 'Activar la casilla VIERNES en el conteo de esta ruta (suma al total de la tienda, no a la carga)') +
+    chip('chip-domingo', 'domingo', s.tieneCasillaDomingo, 'DOMINGO', 'Quitar la casilla DOMINGO de esta ruta', 'Activar la casilla DOMINGO en el conteo de esta ruta (suma al total de la tienda, no a la carga)') +
+    chip('chip-azul', 'pdfespecial', s.tienePdfEspecial, 'PDF ESPECIAL', 'Quitar el PDF ESPECIAL de esta ruta', 'Activar el PDF ESPECIAL para esta ruta') +
+  '</div>';
+}
+
+/** Fila de títulos encima de las tiendas de una ruta, para que se sepa
+ *  qué es cada número (límite de palets y número de tienda) y qué
+ *  significan los colores de los botones de nave. */
+function cabeceraTiendasPlantillaHtml_() {
+  return '<div class="plantilla-tiendas-cabecera">' +
+    '<span class="plantilla-tienda-asa-hueco"></span>' +
+    '<span class="col-lim">Límite palets</span>' +
+    '<span class="col-num">Nº tienda</span>' +
+    '<span class="col-nombre">Tienda</span>' +
+    '<span class="col-leyenda">Naves: <i class="ley-carga"></i>carga <i class="ley-bloq"></i>bloqueada (pulsa para cambiar)</span>' +
+  '</div>';
 }
 
 function pintarPlantilla_() {
@@ -673,7 +833,7 @@ function pintarPlantilla_() {
         '<div class="plantilla-tienda' + (ti === 0 ? ' primera' : '') + (tieneNota ? ' con-nota' : '') + (puntualSale ? (puntualSale.modo === 'doble' ? ' sale-puntual doble' : ' sale-puntual') : '') + '" data-tienda-row="' + t.row + '">' +
           // Asa para arrastrar la tienda dentro de su ruta (sustituye a las
           // antiguas flechas subir/bajar). Solo con permiso de plantilla.
-          (tienePermiso('plantilla') && (s.tiendas.length + puntualesEntran.length) > 1
+          (puedeEditarPlantilla_() && (s.tiendas.length + puntualesEntran.length) > 1
             ? '<span class="plantilla-tienda-asa" data-asa-row="' + t.row + '" title="Arrastrar para cambiar de posición">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>' +
               '</span>'
@@ -690,9 +850,9 @@ function pintarPlantilla_() {
             botonBloqueoPlantillaHtml_(t, 'pta', 'PTA') +
             botonBloqueoPlantillaHtml_(t, 'cart', 'CART.')) +
           '</div>' +
-          '<button type="button" class="plantilla-tienda-nota' + (tieneNota ? ' con-dato' : '') + '" data-nota-fila="' + t.row + '" data-nota-texto="' + escapeAttr(t.nota || '') + '" data-nota-grupo="' + (t.notaGrupoId ? '1' : '0') + '" title="' + (t.notaGrupoId ? 'Pertenece a un grupo de palets: edítalo desde Grupos de palets' : (tieneNota ? 'Editar comentario' : 'Añadir comentario')) + '"' + (tienePermiso('plantilla') ? '' : ' disabled') + '>' +
+          '<button type="button" class="plantilla-tienda-nota' + (tieneNota ? ' con-dato' : '') + '" data-nota-fila="' + t.row + '" data-nota-texto="' + escapeAttr(t.nota || '') + '" data-nota-grupo="' + (t.notaGrupoId ? '1' : '0') + '" title="' + (t.notaGrupoId ? 'Pertenece a un grupo de palets: edítalo desde Grupos de palets' : (tieneNota ? 'Editar comentario' : 'Añadir comentario')) + '"' + (puedeEditarPlantilla_() ? '' : ' disabled') + '>' +
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L3 3v6.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg></button>' +
-          (tienePermiso('plantilla') ? (
+          (puedeEditarPlantilla_() ? (
             '<button type="button" class="plantilla-tienda-mover" data-mover-tienda="' + t.row + '" title="Mover a otra agrupación">' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>' +
             '<button type="button" class="plantilla-tienda-editar" data-editar-tienda="' + t.row + '" title="Límite de palets de esta tienda">' +
@@ -723,7 +883,7 @@ function pintarPlantilla_() {
         : '';
       piezasPuntuales.push({ pos: Number(p.pos) || 0, html:
         '<div class="plantilla-tienda entra-puntual' + (p.grupoId ? ' con-nota' : '') + '" data-puntual-id="' + escapeAttr(p.id) + '">' +
-          (tienePermiso('plantilla')
+          (puedeEditarPlantilla_()
             ? '<span class="plantilla-tienda-asa" data-asa-puntual="' + escapeAttr(p.id) + '" title="Arrastrar para cambiar de posición (solo este día)">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>' +
               '</span>'
@@ -741,16 +901,16 @@ function pintarPlantilla_() {
                 botonBloqueoPlantillaHtml_(tOrigen, 'cart', 'CART.') +
               '</div>'
             : '') +
-          (tienePermiso('plantilla')
+          (puedeEditarPlantilla_()
             ? '<button type="button" class="plantilla-tienda-nota' + (p.grupoId ? ' con-dato' : '') + '" data-grupo-puntual="' + escapeAttr(p.id) + '" title="Grupo de palets de esta tienda este día"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L3 3v6.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg></button>'
             : '') +
           // Lápiz: límite de palets solo para este día (es la misma fila de
           // la tienda en el conteo especial, así que no toca ningún otro día).
-          ((tOrigen && tienePermiso('plantilla'))
+          ((tOrigen && puedeEditarPlantilla_())
             ? '<button type="button" class="plantilla-tienda-editar" data-editar-tienda="' + tOrigen.row + '" title="Límite de palets de esta tienda este día">' +
                 '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>'
             : '') +
-          (tienePermiso('plantilla')
+          (puedeEditarPlantilla_()
             ? '<button type="button" class="plantilla-tienda-quitar-puntual" data-quitar-puntual="' + escapeAttr(p.id) + '" data-puntual-tienda="' + escapeAttr(p.tienda) + '" data-puntual-origen="' + escapeAttr(p.origen) + '" title="Quitar el cambio puntual: vuelve a salir por su agrupación">Quitar</button>'
             : '') +
           grupoPuntualHtml +
@@ -774,8 +934,8 @@ function pintarPlantilla_() {
       const idn = 'nc' + si + '_' + ni;
       return (
         '<div class="plantilla-notacarga-item">' +
-          '<input type="text" id="' + idn + '" value="' + escapeAttr(n.texto) + '" ' + (tienePermiso('plantilla') ? '' : 'disabled') + '>' +
-          (tienePermiso('plantilla') ? (
+          '<input type="text" id="' + idn + '" value="' + escapeAttr(n.texto) + '" ' + (puedeEditarPlantilla_() ? '' : 'disabled') + '>' +
+          (puedeEditarPlantilla_() ? (
             '<button type="button" class="plantilla-tienda-guardar" data-guardar-notacarga="' + n.row + '" data-id="' + idn + '" title="Guardar" disabled>' +
               '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>' +
             '<button type="button" class="plantilla-tienda-borrar" data-borrar-notacarga="' + n.row + '" title="Eliminar nota de carga">' +
@@ -795,20 +955,16 @@ function pintarPlantilla_() {
               '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
           '</div>' +
           '<span class="plantilla-ruta-nombre-texto">' + escapeHtml(s.nombre) + '</span>' +
-          (tienePermiso('plantilla')
+          (puedeEditarPlantilla_()
             ? '<button type="button" class="plantilla-ruta-editar" data-editar-ruta="' + escapeAttr(s.nombre) + '" title="Editar ubicación y hora de carga">' +
                 '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>'
             : '') +
           '<span class="plantilla-ruta-contador">' + s.tiendas.length + (s.tiendas.length === 1 ? ' tienda' : ' tiendas') + '</span>' +
           (puntualesEntran.length ? '<span class="plantilla-ruta-contador puntual">+' + puntualesEntran.length + ' puntual' + (puntualesEntran.length === 1 ? '' : 'es') + '</span>' : '') +
           '<div class="plantilla-ruta-spacer"></div>' +
-          (tienePermiso('plantilla') ? (
-            '<button type="button" class="plantilla-ruta-peso' + (s.tienePeso ? ' activo' : '') + '" data-toggle-peso="' + escapeAttr(s.nombre) + '" data-peso-activo="' + (s.tienePeso ? '1' : '0') + '" title="' + (s.tienePeso ? 'Quitar la casilla PESO de esta ruta' : 'Activar la casilla PESO en el conteo de esta ruta') + '">PESO</button>' +
-            '<button type="button" class="plantilla-ruta-cexpress' + (s.tieneCExpress ? ' activo' : '') + '" data-toggle-cexpress="' + escapeAttr(s.nombre) + '" data-cexpress-activo="' + (s.tieneCExpress ? '1' : '0') + '" title="' + (s.tieneCExpress ? 'Quitar la casilla C.EXPRESS de esta ruta' : 'Activar la casilla C.EXPRESS en el conteo de esta ruta') + '">C.EXPRESS</button>' +
-            '<button type="button" class="plantilla-ruta-sobrestock' + (s.tieneSobrestock ? ' activo' : '') + '" data-toggle-sobrestock="' + escapeAttr(s.nombre) + '" data-sobrestock-activo="' + (s.tieneSobrestock ? '1' : '0') + '" title="' + (s.tieneSobrestock ? 'Quitar la casilla SOBRESTOCK de esta ruta' : 'Activar la casilla SOBRESTOCK en el conteo de esta ruta') + '">SOBRESTOCK</button>' +
-            '<button type="button" class="plantilla-ruta-viernes' + (s.tieneViernes ? ' activo' : '') + '" data-toggle-viernes="' + escapeAttr(s.nombre) + '" data-viernes-activo="' + (s.tieneViernes ? '1' : '0') + '" title="' + (s.tieneViernes ? 'Quitar la casilla VIERNES de esta ruta' : 'Activar la casilla VIERNES en el conteo de esta ruta (suma al total de la tienda, no a la carga)') + '">VIERNES</button>' +
-            '<button type="button" class="plantilla-ruta-domingo' + (s.tieneCasillaDomingo ? ' activo' : '') + '" data-toggle-domingo="' + escapeAttr(s.nombre) + '" data-domingo-activo="' + (s.tieneCasillaDomingo ? '1' : '0') + '" title="' + (s.tieneCasillaDomingo ? 'Quitar la casilla DOMINGO de esta ruta' : 'Activar la casilla DOMINGO en el conteo de esta ruta (suma al total de la tienda, no a la carga)') + '">DOMINGO</button>' +
-            '<button type="button" class="plantilla-ruta-pdfespecial' + (s.tienePdfEspecial ? ' activo' : '') + '" data-toggle-pdfespecial="' + escapeAttr(s.nombre) + '" data-pdfespecial-activo="' + (s.tienePdfEspecial ? '1' : '0') + '" title="' + (s.tienePdfEspecial ? 'Quitar el PDF ESPECIAL de esta ruta' : 'Activar el PDF ESPECIAL para esta ruta') + '">PDF ESPECIAL</button>' +
+          (puedeEditarPlantilla_() ? (
+            '<button type="button" class="plantilla-ruta-nota-carga" data-anadir-notacarga="' + escapeAttr(s.nombre) + '" title="Añadir una nota de carga a esta ruta">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nota de carga</button>' +
             '<button type="button" class="plantilla-ruta-orden' + (s.ordenRetirada && s.ordenRetirada.length ? ' activo' : '') + '" data-orden-ruta="' + escapeAttr(s.nombre) + '" title="' + (s.ordenRetirada && s.ordenRetirada.length ? 'Editar el orden de retirada (' + s.ordenRetirada.length + ' tienda(s))' : 'Configurar el orden en que se quitan los palets de esta ruta') + '">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>' +
               'Orden retirada' + (s.ordenRetirada && s.ordenRetirada.length ? ' (' + s.ordenRetirada.length + ')' : '') +
@@ -826,14 +982,11 @@ function pintarPlantilla_() {
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>'
           ) : '') +
         '</div>' +
-        (notasCargaHtml || tienePermiso('plantilla') ? (
-          '<div class="plantilla-notascarga">' +
-            notasCargaHtml +
-            (tienePermiso('plantilla') ? '<button type="button" class="plantilla-anadir-notacarga" data-anadir-notacarga="' + escapeAttr(s.nombre) + '">' +
-              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Añadir nota de carga</button>' : '') +
-          '</div>'
-        ) : '') +
-        '<div class="plantilla-tiendas">' + (tiendasHtml || '<div class="festivos-item-vacio">Sin tiendas todavía.</div>') + '</div>' +
+        opcionesRutaPlantillaHtml_(s) +
+        (notasCargaHtml ? '<div class="plantilla-notascarga">' + notasCargaHtml + '</div>' : '') +
+        '<div class="plantilla-tiendas">' +
+          (tiendasHtml ? cabeceraTiendasPlantillaHtml_() + tiendasHtml : '<div class="festivos-item-vacio">Sin tiendas todavía.</div>') +
+        '</div>' +
       '</div>'
     );
   }).join('');
@@ -1053,7 +1206,7 @@ function botonViernesTiendaPlantillaHtml_(t) {
   const titulo = incluida
     ? 'Esta tienda lleva VIERNES. Pulsa para excluirla'
     : 'Esta tienda NO lleva VIERNES. Pulsa para incluirla';
-  return '<button type="button" class="plantilla-tienda-viernes' + (incluida ? ' activo' : '') + '" data-viernes-row="' + t.row + '" data-viernes-incluida="' + (incluida ? '1' : '0') + '" title="' + titulo + '"' + (tienePermiso('plantilla') ? '' : ' disabled') + '>VIE</button>';
+  return '<button type="button" class="plantilla-tienda-viernes' + (incluida ? ' activo' : '') + '" data-viernes-row="' + t.row + '" data-viernes-incluida="' + (incluida ? '1' : '0') + '" title="' + titulo + '"' + (puedeEditarPlantilla_() ? '' : ' disabled') + '>VIE</button>';
 }
 
 /** Incluye o excluye una tienda concreta de la casilla VIERNES de su ruta.
@@ -1107,7 +1260,7 @@ function botonDomingoTiendaPlantillaHtml_(t) {
   const titulo = incluida
     ? 'Esta tienda lleva DOMINGO. Pulsa para excluirla'
     : 'Esta tienda NO lleva DOMINGO. Pulsa para incluirla';
-  return '<button type="button" class="plantilla-tienda-domingo' + (incluida ? ' activo' : '') + '" data-domingo-row="' + t.row + '" data-domingo-incluida="' + (incluida ? '1' : '0') + '" title="' + titulo + '"' + (tienePermiso('plantilla') ? '' : ' disabled') + '>DOM</button>';
+  return '<button type="button" class="plantilla-tienda-domingo' + (incluida ? ' activo' : '') + '" data-domingo-row="' + t.row + '" data-domingo-incluida="' + (incluida ? '1' : '0') + '" title="' + titulo + '"' + (puedeEditarPlantilla_() ? '' : ' disabled') + '>DOM</button>';
 }
 
 /** Incluye o excluye una tienda concreta de la casilla DOMINGO de su ruta.
@@ -1268,12 +1421,11 @@ function confirmarEliminarTiendaPlantilla_(row) {
     .then(function (resultado) {
       const dias = (resultado && resultado.dias) || [];
       if (!dias.length) {
-        appConfirm(
-          'Eliminar tienda',
-          '¿Seguro que quieres eliminar esta tienda de la plantilla? Esta acción no se puede deshacer.',
-          function () { eliminarTiendaPlantilla_(row); },
-          true
-        );
+        appConfirmDeslizando({
+          titulo: 'Eliminar tienda',
+          texto: '¿Seguro que quieres eliminar esta tienda de la plantilla? Esta acción no se puede deshacer.',
+          onConfirmar: function () { eliminarTiendaPlantilla_(row); }
+        });
         return;
       }
       mostrarModalEliminarTiendaVariosDias_(row, dias);
@@ -1285,31 +1437,18 @@ function confirmarEliminarTiendaPlantilla_(row) {
  *  aparece en otros días: cancelar, borrar solo el día actual, o borrar
  *  de golpe en todos los días donde aparezca. */
 function mostrarModalEliminarTiendaVariosDias_(row, dias) {
-  document.getElementById('modal-box').classList.remove('ancho');
-  document.getElementById('modal-box').classList.remove('usuario-form');
-  document.getElementById('modal-box').classList.add('medio');
-  document.getElementById('modal-box').classList.remove('peligro');
-  document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Esta tienda aparece en más días';
-  document.getElementById('modal-text').style.display = 'none';
-  document.getElementById('modal-textarea').style.display = 'none';
-
-  const custom = document.getElementById('modal-custom');
-  custom.style.display = 'block';
-  custom.innerHTML =
-    '<p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Esta misma tienda también está en: <b>' +
-      dias.map(escapeHtml).join(', ') +
-      '</b>. Si borras solo aquí, seguirá existiendo con normalidad en esos otros días (no se queda huérfana). Usa "Borrar en todos" solo si quieres quitarla por completo de la plantilla.</p>';
-
-  const actions = document.getElementById('modal-actions');
-  actions.innerHTML =
-    '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
-    '<button class="modal-confirm" id="modal-borrar-aqui-btn">Borrar solo aquí</button>' +
-    '<button class="modal-confirm danger" id="modal-borrar-todos-btn">Borrar en todos (' + (dias.length + 1) + ' días)</button>';
-  document.getElementById('modal-overlay').style.display = 'flex';
-  document.getElementById('modal-cancel-btn').onclick = cerrarModal;
-  document.getElementById('modal-borrar-aqui-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantilla_(row); };
-  document.getElementById('modal-borrar-todos-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantillaTodosDias_(row); };
+  appConfirmDeslizando({
+    titulo: 'Esta tienda aparece en más días',
+    texto: 'Esta misma tienda también está en: ' + dias.join(', ') + '. Si la borras solo aquí, seguirá existiendo con normalidad en esos otros días. Borra en todos solo si quieres quitarla por completo de la plantilla.',
+    opciones: [
+      { valor: 'aqui', etiqueta: 'Borrar solo en ' + PLANTILLA_ESTADO.dia },
+      { valor: 'todos', etiqueta: 'Borrar en todos (' + (dias.length + 1) + ' días)' }
+    ],
+    onConfirmar: function (opcion) {
+      if (opcion === 'todos') eliminarTiendaPlantillaTodosDias_(row);
+      else eliminarTiendaPlantilla_(row);
+    }
+  });
 }
 
 /** Modal con 2 opciones cuando la tienda que se va a borrar tiene
@@ -1317,29 +1456,15 @@ function mostrarModalEliminarTiendaVariosDias_(row, dias) {
  *  para siempre) o conservarlos (la tienda se oculta de la plantilla,
  *  pero su histórico sigue intacto y consultable en esos días). */
 function mostrarModalEliminarTiendaConHistorico_(row, nConteos) {
-  document.getElementById('modal-box').classList.remove('ancho');
-  document.getElementById('modal-box').classList.remove('usuario-form');
-  document.getElementById('modal-box').classList.add('medio');
-  document.getElementById('modal-box').classList.remove('peligro');
-  document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Esta tienda tiene conteos guardados';
-  document.getElementById('modal-text').style.display = 'none';
-  document.getElementById('modal-textarea').style.display = 'none';
-
-  const custom = document.getElementById('modal-custom');
-  custom.style.display = 'block';
-  custom.innerHTML =
-    '<p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">Esta tienda tiene ' + nConteos + ' conteo(s) guardado(s) de días anteriores. ¿Qué quieres hacer con ese histórico?</p>';
-
-  const actions = document.getElementById('modal-actions');
-  actions.innerHTML =
-    '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
-    '<button class="modal-confirm" id="modal-conservar-btn">Conservar histórico (ocultar tienda)</button>' +
-    '<button class="modal-confirm danger" id="modal-borrar-hist-btn">Borrar también el histórico</button>';
-  document.getElementById('modal-overlay').style.display = 'flex';
-  document.getElementById('modal-cancel-btn').onclick = cerrarModal;
-  document.getElementById('modal-conservar-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantilla_(row, 'conservar_historico'); };
-  document.getElementById('modal-borrar-hist-btn').onclick = function () { cerrarModal(); eliminarTiendaPlantilla_(row, 'borrar_historico'); };
+  appConfirmDeslizando({
+    titulo: 'Esta tienda tiene conteos guardados',
+    texto: 'Esta tienda tiene ' + nConteos + ' conteo(s) guardado(s) de días anteriores. ¿Qué quieres hacer con ese histórico?',
+    opciones: [
+      { valor: 'conservar_historico', etiqueta: 'Conservar histórico (ocultar tienda)' },
+      { valor: 'borrar_historico', etiqueta: 'Borrar también el histórico' }
+    ],
+    onConfirmar: function (opcion) { eliminarTiendaPlantilla_(row, opcion); }
+  });
 }
 
 function eliminarTiendaPlantilla_(row, modo) {
@@ -1794,10 +1919,10 @@ function guardarNotaCargaPlantilla_(row, idSeguro) {
 }
 
 function confirmarEliminarNotaCargaPlantilla_(row) {
-  appConfirm(
-    'Eliminar nota de carga',
-    '¿Seguro que quieres eliminar esta nota de carga? Esta acción no se puede deshacer.',
-    function () {
+  appConfirmDeslizando({
+    titulo: 'Eliminar nota de carga',
+    texto: '¿Seguro que quieres eliminar esta nota de carga? Esta acción no se puede deshacer.',
+    onConfirmar: function () {
       const r = Number(row);
       const mutar = function () {
         const info = buscarNotaCargaPlantilla_(r);
@@ -1806,9 +1931,8 @@ function confirmarEliminarNotaCargaPlantilla_(row) {
         desplazarRowsPlantillaDesde_(r + 1, -1);
       };
       guardarPlantillaOptimista_(mutar, 'eliminarNotaCargaPlantilla', [PLANTILLA_ESTADO.dia, r], 'Eliminada');
-    },
-    true
-  );
+    }
+  });
 }
 
 function abrirModalAnadirNotaCargaPlantilla_(nombreRuta) {
@@ -3091,6 +3215,10 @@ function dividirNombreRutaPlantilla_(nombreCompleto) {
  *  agrupación configurada (mismo riesgo de desincronización que tenía el
  *  lápiz de "Editar tienda" con el número/nombre de tienda). Por eso este
  *  modal siempre reenvía el nombre de agrupación tal cual estaba. */
+/** Naves / ubicaciones de carga que se ofrecen en el desplegable del
+ *  lápiz de la agrupación (Ubicación y hora de carga). */
+const UBICACIONES_CARGA_ = ['GAITE', 'PTA', 'CARTAMA', 'AMBAS NAVES', 'NAVE RIO', 'ALBINONI'];
+
 function abrirModalEditarRutaPlantilla_(nombreActual) {
   const partes = dividirNombreRutaPlantilla_(nombreActual);
 
@@ -3099,22 +3227,57 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
   document.getElementById('modal-box').classList.remove('peligro');
   document.getElementById('modal-box').classList.remove('usuario-form');
   document.getElementById('modal-title').style.display = '';
-  document.getElementById('modal-title').textContent = 'Ubicación y hora de carga — ' + partes.nombre;
+  // Título en dos líneas: qué se modifica y, debajo, la agrupación.
+  document.getElementById('modal-title').innerHTML =
+    'Modificación ubicación y hora carga' +
+    '<span class="modal-titulo-sub">' + escapeHtml(partes.nombre) + '</span>';
   document.getElementById('modal-text').style.display = 'none';
   document.getElementById('modal-textarea').style.display = 'none';
+
+  // Ubicación: desplegable con las naves de carga. Si la ruta tiene ahora
+  // otra cosa (p. ej. "AMBAS NAVES" o "GAITE Y PTA MADRUGADA"), sale
+  // también, marcada como "(actual)", para no perderla al guardar.
+  const ubicActual = String(partes.ubicacion || '').trim().toUpperCase();
+  const naves = UBICACIONES_CARGA_.slice();
+  const opcionesUbic = (ubicActual && naves.indexOf(ubicActual) === -1
+      ? '<option value="' + escapeAttr(ubicActual) + '" selected>' + escapeHtml(ubicActual) + ' (actual)</option>'
+      : '') +
+    naves.map(function (n) {
+      return '<option value="' + escapeAttr(n) + '"' + (n === ubicActual ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+    }).join('');
+
+  // Hora: selector de hora. Con una franja ("14:00 - 19:00") se rellena
+  // también el "hasta". Si ahora pone algo que no es una hora (NOCHE,
+  // "-"...), los selectores salen vacíos y, si no se elige ninguna hora,
+  // se deja lo que había.
+  const horaTxt = String(partes.hora || '').trim();
+  const mRango = horaTxt.match(/^(\d{1,2}:\d{2})(?:\s*-\s*(\d{1,2}:\d{2}))?$/);
+  const pad = function (h) { return h ? (h.length === 4 ? '0' + h : h) : ''; };
+  const desde = mRango ? pad(mRango[1]) : '';
+  const hasta = mRango && mRango[2] ? pad(mRango[2]) : '';
+  const horaNoEsHora = horaTxt && horaTxt !== '-' && !mRango;
 
   const custom = document.getElementById('modal-custom');
   custom.style.display = 'block';
   custom.innerHTML =
     '<div class="modal-campo">' +
       '<label for="modal-ruta-ubicacion">Ubicación de carga</label>' +
-      '<input type="text" id="modal-ruta-ubicacion" value="' + escapeAttr(partes.ubicacion) + '" placeholder="Ej: GAITE">' +
+      '<select id="modal-ruta-ubicacion">' +
+        (ubicActual ? '' : '<option value="" selected>Selecciona…</option>') +
+        opcionesUbic +
+      '</select>' +
     '</div>' +
     '<div class="modal-campo">' +
       '<label for="modal-ruta-hora">Hora de carga</label>' +
-      '<input type="text" id="modal-ruta-hora" value="' + escapeAttr(partes.hora) + '" placeholder="Ej: 10:00 (déjalo en blanco si no aplica)">' +
-    '</div>' +
-    '<p class="modal-campo-ayuda">El nombre de la agrupación ("' + escapeHtml(partes.nombre) + '") no se puede cambiar aquí: sale de Configuración agencias.</p>';
+      '<div class="modal-horas">' +
+        '<input type="time" id="modal-ruta-hora" value="' + escapeAttr(desde) + '">' +
+        '<span class="modal-horas-sep">hasta</span>' +
+        '<input type="time" id="modal-ruta-hora-hasta" value="' + escapeAttr(hasta) + '" title="Solo si es una franja (p. ej. 14:00 - 19:00)">' +
+      '</div>' +
+      '<span class="modal-campo-ayuda">«Hasta» solo si carga en una franja de horas. Sin hora, la ruta queda sin hora fija.' +
+        (horaNoEsHora ? ' Ahora pone «' + escapeHtml(horaTxt) + '»: si no eliges hora, se deja así.' : '') +
+      '</span>' +
+    '</div>';
 
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
@@ -3125,16 +3288,25 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
   document.getElementById('modal-confirm-btn').onclick = function () {
     const inputUbicacion = document.getElementById('modal-ruta-ubicacion');
     const inputHora = document.getElementById('modal-ruta-hora');
+    const inputHasta = document.getElementById('modal-ruta-hora-hasta');
     const ubicacion = inputUbicacion.value.trim();
-    const hora = inputHora.value.trim();
     if (!ubicacion) { inputUbicacion.focus(); return; }
+    // El selector da "08:00"; se guarda como "8:00", igual que el resto
+    // de rutas (p. ej. "GAITE 8:00").
+    const sinCero = function (h) { return String(h || '').trim().replace(/^0(\d:)/, '$1'); };
+    const h1 = sinCero(inputHora.value);
+    const h2 = sinCero(inputHasta.value);
+    if (h2 && !h1) { inputHora.focus(); return; }
+    let hora = h1 ? (h2 ? h1 + ' - ' + h2 : h1) : '';
+    if (!hora && horaNoEsHora) hora = horaTxt;
 
     // Mismo formato que "Añadir ruta nueva": "NOMBRE (UBICACION HORA)",
-    // o "NOMBRE (UBICACION)" si se deja la hora en blanco (hay rutas
-    // reales sin una hora fija, p.ej. "CBL MALAGA (AMBAS NAVES)"). El
-    // nombre de la agrupación se reenvía siempre igual (partes.nombre).
+    // o "NOMBRE (UBICACION)" si no hay hora (hay rutas reales sin una hora
+    // fija, p.ej. "CBL MALAGA (AMBAS NAVES)"). El nombre de la agrupación
+    // se reenvía siempre igual (partes.nombre).
     const nombreCompleto = partes.nombre + ' (' + ubicacion + (hora ? ' ' + hora : '') + ')';
     cerrarModal();
+    if (nombreCompleto === nombreActual) return;
     const mutar = function () {
       const s = PLANTILLA_ESTADO.secciones.find(function (s) { return s.nombre === nombreActual; });
       if (s) s.nombre = nombreCompleto;
@@ -3145,12 +3317,12 @@ function abrirModalEditarRutaPlantilla_(nombreActual) {
 }
 
 function confirmarEliminarRutaPlantilla_(nombreRuta) {
-  appConfirm(
-    'Eliminar ruta completa',
-    '¿Seguro que quieres eliminar la ruta "' + nombreRuta + '" y TODAS sus tiendas de ' + PLANTILLA_ESTADO.dia + '? Esta acción no se puede deshacer.',
-    function () { eliminarRutaPlantilla_(nombreRuta); },
-    true
-  );
+  appConfirmDeslizando({
+    titulo: 'Eliminar ruta completa',
+    texto: '¿Seguro que quieres eliminar la ruta "' + nombreRuta + '" y TODAS sus tiendas de ' + PLANTILLA_ESTADO.dia + '? Esta acción no se puede deshacer.',
+    textoBarra: 'Desliza para eliminar la ruta',
+    onConfirmar: function () { eliminarRutaPlantilla_(nombreRuta); }
+  });
 }
 function eliminarRutaPlantilla_(nombreRuta) {
   // Borra un bloque de filas completo (título + notas + tiendas); se pide
@@ -3243,10 +3415,10 @@ function anadirRutaPlantilla_() {
           '<label for="modal-ruta-ubicacion">Ubicación de carga</label>' +
           '<select id="modal-ruta-ubicacion">' +
             '<option value="">Selecciona…</option>' +
-            '<option value="GAITE">GAITE</option>' +
-            '<option value="CARTAMA">CARTAMA</option>' +
-            '<option value="PTA">PTA</option>' +
-            '<option value="AMBAS NAVES">AMBAS NAVES</option>' +
+            // Mismas naves que el lápiz de la agrupación (UBICACIONES_CARGA_).
+            UBICACIONES_CARGA_.map(function (n) {
+              return '<option value="' + escapeAttr(n) + '">' + escapeHtml(n) + '</option>';
+            }).join('') +
           '</select>' +
         '</div>' +
         '<div class="modal-campo">' +
@@ -3314,6 +3486,7 @@ function renderShellPrincipal() {
           '<div class="menu-rapido-buscar">' +
             '<span class="emoji">🔍</span>' +
             '<input type="text" id="menu-rapido-buscar-input" placeholder="Buscar agrupación o tienda…">' +
+            '<button type="button" class="menu-rapido-limpiar" id="menu-rapido-limpiar" title="Borrar búsqueda" aria-label="Borrar búsqueda" hidden>×</button>' +
           '</div>' +
           '<div class="menu-rapido-body" id="menu-rapido-body"><div class="menu-rapido-vacio cargando-linea"><span class="spinner-mini"></span>Cargando…</div></div>' +
         '</div>' +
@@ -3343,13 +3516,30 @@ function renderShellPrincipal() {
     document.getElementById('calendar-panel').classList.toggle('colapsado', ESTADO.calendarioColapsado);
   };
 
+  // El panel se vuelve a pintar al volver a esta vista: el buscador recupera
+  // lo que hubiera escrito, para que no salga vacío con la lista filtrada.
+  const inputBuscarMenu = document.getElementById('menu-rapido-buscar-input');
+  const btnLimpiarMenu = document.getElementById('menu-rapido-limpiar');
+  inputBuscarMenu.value = MENU_RAPIDO_ESTADO.texto || '';
+  btnLimpiarMenu.hidden = !inputBuscarMenu.value;
   let temporizadorBusquedaMenuRapido_ = null;
-  document.getElementById('menu-rapido-buscar-input').addEventListener('input', function (e) {
+  inputBuscarMenu.addEventListener('input', function (e) {
     clearTimeout(temporizadorBusquedaMenuRapido_);
     const valor = e.target.value;
+    MENU_RAPIDO_ESTADO.texto = valor;
+    btnLimpiarMenu.hidden = !valor;
     temporizadorBusquedaMenuRapido_ = setTimeout(function () {
       MENU_RAPIDO_ESTADO.filtro = normalizarBusquedaPlantilla_(valor.trim());
       pintarMenuRapido_();
     }, 150);
   });
+  btnLimpiarMenu.onclick = function () {
+    clearTimeout(temporizadorBusquedaMenuRapido_);
+    inputBuscarMenu.value = '';
+    MENU_RAPIDO_ESTADO.texto = '';
+    MENU_RAPIDO_ESTADO.filtro = '';
+    btnLimpiarMenu.hidden = true;
+    pintarMenuRapido_();
+    inputBuscarMenu.focus();
+  };
 }

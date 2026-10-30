@@ -8,6 +8,38 @@
  * Redacción en impersonal (la lee todo el equipo). */
 const CHANGELOG_SALIDAS = [
   {
+    version: '2.1.13',
+    fecha: '2026-10-27',
+    cambios: [
+      { tipo: 'nuevo',      texto: 'Pantalla de inicio: la columna Estado sigue todo el camino de la carga: En progreso (falta algún check en verde), Carga sin ajustar (los 3 checks en verde), Carga ajustada, Previsión enviada y Definitivo enviado, cada uno con su color. El texto del estado se ve un poco más grande' },
+      { tipo: 'nuevo',      texto: 'Aviso en rojo «CARGA NO AJUSTADA POR UN RESPONSABLE» en la cabecera cuando las 3 naves están verificadas y todavía no se ha ajustado la carga' },
+      { tipo: 'mejora',     texto: 'La previsión y el definitivo enviados se ven en el sobre del email (azul la previsión, verde el definitivo, con una marca ✓); quién lo envió y a qué hora sale al pasar el ratón y al abrir el menú. Desaparecen de la cabecera los avisos «Previsión enviada por» y «Definitivo enviado por»' },
+      { tipo: 'mejora',     texto: 'Cabeceras de las agrupaciones ordenadas e iguales en todas: el nombre más grande, con los checks de las naves justo debajo; ubicación, tiendas, estado y las pestañas de carga en un bloque alineado en el centro, y los botones a la derecha. Todas miden lo mismo y los nombres largos ya no se cortan' },
+      { tipo: 'mejora',     texto: 'Las pestañas de la carga pasan a llamarse «Carga ajustada» (siempre, también después de enviar la previsión o el definitivo) y «Conteo real» (antes «Ver conteo real sin ajustar»)' },
+      { tipo: 'mejora',     texto: 'Los días con conteo especial se indican con una etiqueta naranja «CONTEO ESPECIAL» en la barra azul, junto a la fecha (en lugar de la franja de aviso encima de las agrupaciones)' },
+      { tipo: 'correccion', texto: 'Con la carga ajustada, el aviso de cada ruta («8P MAX. POR RUTA … x/8») cuenta los palets que se cargan y no los contados (antes salía pasada aunque no lo estuviera)' },
+      { tipo: 'correccion', texto: 'El PDF especial respeta la pestaña que se está viendo: desde «Carga ajustada» sale la carga ajustada y desde «Conteo real», lo contado' },
+      { tipo: 'mejora',     texto: 'El PDF especial pasa a llamarse «PDF Control responsables» y sale siempre en un folio A4 apaisado con sus márgenes (se ajusta para que quepa entero en una hoja)' },
+      { tipo: 'mejora',     texto: 'PDF Control responsables: nueva columna NAVE CARGA (sale de la anotación «CARGA EN …»), sin las columnas SOBRAN y AGENCIA (la agencia ya va en el título) y más sitio para las firmas, la recogida y la zona. La fecha va a la derecha del título' },
+      { tipo: 'mejora',     texto: 'PDF Control responsables: cada ruta se separa con un borde grueso; las tiendas sueltas llevan TOTAL RUTA rayado (no lleva dato) y su LÍMITE CAMIÓN sale de su propia nota (p. ej. «8P MAX.»). TOTAL, TOTAL RUTA y NAVE CARGA, con letra más grande' },
+      { tipo: 'mejora',     texto: 'Rutas y tiendas: los conteos especiales ya pasados no llenan la fila de días; se consultan en «Pasados», agrupados por meses y con buscador por fecha' },
+      { tipo: 'mejora',     texto: 'Rutas y tiendas: al editar la ubicación y hora de carga de una agrupación (y al añadir una ruta nueva), la ubicación se elige en un desplegable (GAITE, PTA, CARTAMA, AMBAS NAVES, NAVE RIO, ALBINONI) y la hora con un selector de hora (con «hasta» para las franjas)' }
+    ]
+  },
+  {
+    version: '2.1.12',
+    fecha: '2026-10-26',
+    cambios: [
+      { tipo: 'nuevo',      texto: 'Conteo bloqueado con candado: en cuanto se ajusta la carga o se envía la previsión, el conteo queda bloqueado para los operarios (si hay que cambiar algo, se avisa a un responsable). Un responsable lo desbloquea arrastrando el candado hasta el final de la barra (al desbloquear se borra la carga ajustada; la previsión enviada no se deshace). Se vuelve a bloquear si se ajusta la carga o se envía la previsión otra vez' },
+      { tipo: 'nuevo',      texto: 'Con el definitivo enviado, el mismo candado sirve para desbloquearlo el mismo día (sustituye a la papelera «Deshacer envío»)' },
+      { tipo: 'nuevo',      texto: 'Pestañas «Carga ajustada» (o «Carga enviada») y «Ver conteo real sin ajustar» cuando lo que se carga no coincide con lo contado. La carga se ve limpia; los avisos de límite salen en el conteo real' },
+      { tipo: 'mejora',     texto: 'Los envíos (previsión, definitivo e informática) pasan a un sobre junto al camioncito, y el PDF y el Excel a un botón de descarga' },
+      { tipo: 'mejora',     texto: 'Verificar conteo pasa a ser un icono de check: verde cuando está verificado, naranja si hay que volver a verificar' },
+      { tipo: 'mejora',     texto: 'Cabecera más limpia: sin el botón «Guardar conteo» (se guarda solo), sin el «+» de notas ni la X de bloquear tienda (se hace desde Bloqueo y cambios) y sin hueco en blanco cuando no hay nada que mostrar' },
+      { tipo: 'mejora',     texto: 'La columna DOMINGO pasa a color rosa para no confundirse con el verde de verificado' }
+    ]
+  },
+  {
     version: '2.1.11',
     fecha: '2026-10-24',
     cambios: [

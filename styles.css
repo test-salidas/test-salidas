@@ -272,7 +272,7 @@
   @media (max-width: 1300px) {
     header.topbar { flex-wrap: wrap; row-gap: 6px; }
     header.topbar .topbar-fecha-wrap {
-      position: static; transform: none; left: auto; top: auto;
+      position: relative; transform: none; left: auto; top: auto;
       margin: 0 auto; max-width: none;
     }
   }
@@ -283,6 +283,18 @@
   }
   .btn-imprimir-dia:hover { background: rgba(255,255,255,.24); }
   .btn-imprimir-dia svg { flex: 0 0 auto; }
+  /* Etiqueta naranja "CONTEO ESPECIAL" junto a la fecha (solo esos días). */
+  /* Va "colgada" a la derecha del bloque fecha + imprimir, sin contar para
+   * su ancho: así la fecha sigue exactamente en el mismo sitio (centrada)
+   * los días especiales y los normales. */
+  .topbar-conteo-especial {
+    position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+    background: var(--amber); color: #fff; border-radius: 20px; padding: 5px 12px;
+    font-size: 12px; font-weight: 800; letter-spacing: .4px; white-space: nowrap; cursor: default;
+  }
+  .topbar-conteo-especial[hidden] { display: none; }
+  @media (max-width: 700px) { .topbar-conteo-especial { padding: 4px 8px; font-size: 10.5px; } }
   header.topbar .btn-hoy {
     background: rgba(255,255,255,.12); border: none; color: #fff; border-radius: 20px;
     padding: 7px 14px; font-size: 12.5px; font-weight: 600; flex: 0 0 auto;
@@ -435,7 +447,7 @@
      tabla y la de la tarjeta se quedan siempre fijas arriba. */
   .inicio-tabla-conteo { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
   .inicio-tc-fila {
-    display: grid; grid-template-columns: 1fr repeat(3, 34px) 74px; align-items: center;
+    display: grid; grid-template-columns: 1fr repeat(3, 34px) 120px; align-items: center;
     gap: 3px; padding: 6px 4px; border-bottom: 1px solid var(--line);
   }
   .inicio-tc-fila:last-child { border-bottom: none; }
@@ -488,12 +500,16 @@
 
   .inicio-pill {
     display: inline-flex; align-items: center; justify-content: center; text-align: center;
-    padding: 2.5px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700;
+    padding: 2.5px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 700;
     white-space: nowrap; width: 100%;
   }
   .inicio-pill-completado { background: #e3f3ec; color: var(--ok); }
   .inicio-pill-progreso { background: #fdf1de; color: var(--amber-dark); }
   .inicio-pill-pendiente { background: #eef0f4; color: var(--ink-soft); }
+  .inicio-pill-sin_ajustar { background: #fbe4e4; color: #c0392b; }
+  .inicio-pill-ajustada { background: #e4eefb; color: #2f5fa8; }
+  .inicio-pill-prevision { background: #dff3f5; color: #1f7f8c; }
+  .inicio-pill-definitivo { background: var(--ok); color: #fff; }
 
   /* La insignia de versión, sobre la foto de portada, queda fija en la
      esquina de la pantalla en vez de en el flujo normal (que la dejaría
@@ -646,13 +662,14 @@
     display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative;
   }
   .festivos-dia-col.es-hoy .festivos-dia-col-header { background: #fffaf1; border-color: var(--amber); }
+  /* "+" de cada día en Bloqueos y cambios: en azul para que destaque. */
   .festivos-dia-col-add {
-    position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 6px;
-    border: 1px solid var(--line); background: #fff; color: var(--ink-soft); cursor: pointer; padding: 0;
+    position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 6px;
+    border: 1px solid var(--prevision); background: var(--prevision); color: #fff; cursor: pointer; padding: 0;
     display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, border-color .15s;
   }
-  .festivos-dia-col-add:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
-  .festivos-dia-col.es-hoy .festivos-dia-col-add { background: #fff; }
+  .festivos-dia-col-add:hover { background: #2f62ad; border-color: #2f62ad; color: #fff; }
+  .festivos-dia-col.es-hoy .festivos-dia-col-add { background: var(--prevision); }
   .festivos-dia-col-badge {
     width: 40px; height: 40px; border-radius: 9px; background: var(--navy); color: #fff;
     display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
@@ -1103,7 +1120,39 @@
   .plantilla-dias button.dia-especial:hover { background: #fbecd6; }
   .plantilla-dias button.dia-especial.pasado { opacity: .65; }
   .plantilla-dias button.dia-especial.activo { background: var(--amber); border-color: var(--amber-dark); color: #fff; opacity: 1; }
-  .plantilla-dias button.dia-especial-pasados { border-style: dashed; color: var(--ink-soft); font-weight: 500; }
+  /* "Pasados (n)": abre un desplegable con los conteos especiales pasados
+   * (por meses, con buscador), en vez de soltarlos todos en la fila. */
+  .especiales-pasados-wrap { position: relative; display: inline-flex; }
+  .plantilla-dias button.dia-especial-pasados { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
+  .plantilla-dias button.dia-especial-pasados .chev { transition: transform .15s; }
+  .plantilla-dias button.dia-especial-pasados.abierto { border-color: var(--navy); color: var(--navy); }
+  .plantilla-dias button.dia-especial-pasados.abierto .chev { transform: rotate(180deg); }
+  .especiales-pasados-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; width: 300px;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+    box-shadow: 0 10px 28px rgba(28, 43, 69, .16), 0 2px 6px rgba(28, 43, 69, .08);
+  }
+  .especiales-pasados-menu .ep-buscar {
+    display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 0 9px; color: var(--ink-soft); margin-bottom: 4px;
+  }
+  .especiales-pasados-menu .ep-buscar input { border: none; outline: none; flex: 1; padding: 8px 0; font-size: 12.5px; background: none; }
+  .especiales-pasados-menu .ep-lista { max-height: 320px; overflow-y: auto; }
+  .especiales-pasados-menu .ep-mes[hidden], .especiales-pasados-menu .ep-item[hidden], .especiales-pasados-menu [hidden] { display: none; }
+  .especiales-pasados-menu .ep-mes-titulo { font-size: 10.5px; font-weight: 800; color: var(--ink-soft); letter-spacing: .4px; padding: 9px 8px 4px; }
+  .plantilla-dias .especiales-pasados-menu button.ep-item {
+    display: flex; justify-content: space-between; align-items: center; width: 100%;
+    border: none; background: none; border-radius: 7px; padding: 7px 8px; font-size: 12.5px; text-align: left;
+  }
+  .plantilla-dias .especiales-pasados-menu button.ep-item span { color: var(--ink-soft); font-weight: 500; }
+  .plantilla-dias .especiales-pasados-menu button.ep-item:hover { background: #f4f6f9; }
+  .plantilla-dias .especiales-pasados-menu button.ep-item.activo { background: #fdf1de; color: var(--amber-dark); }
+  .especiales-pasados-menu .ep-vacio { padding: 12px 8px; font-size: 12px; color: var(--ink-soft); text-align: center; }
+  .plantilla-dias .especiales-pasados-menu button.ep-mas {
+    display: block; width: 100%; margin-top: 4px; border: none; border-top: 1px solid var(--line); border-radius: 0;
+    background: none; padding: 9px 8px 4px; font-size: 12px; color: var(--ink-soft);
+  }
+  .plantilla-dias .especiales-pasados-menu button.ep-mas:hover { color: var(--navy); background: none; }
   .plantilla-dias button.dia-especial-nuevo {
     display: inline-flex; align-items: center; gap: 5px;
     border-style: dashed; border-color: var(--amber); color: var(--amber-dark); background: #fff;
@@ -1138,7 +1187,7 @@
      en la fila de días (misma línea que LUNES/MARTES...), que es "sticky",
      así que se mantienen visibles al hacer scroll. Solo aparecen cuando
      hay un día seleccionado y solo buscan entre lo que hay en ESE día. */
-  .plantilla-buscadores { display: flex; gap: 8px; flex: 1 1 340px; max-width: 640px; margin: 0 auto; flex-wrap: wrap; }
+  .plantilla-buscadores { display: flex; gap: 8px; flex: 1 1 300px; max-width: 420px; margin: 0 0 0 auto; flex-wrap: wrap; }
   .plantilla-buscador-wrap { position: relative; flex: 1 1 200px; min-width: 160px; }
   .plantilla-buscador {
     display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px;
@@ -1168,6 +1217,12 @@
     background: #eef1f7; border-radius: 6px; padding: 2px 7px;
   }
   .plantilla-buscador-vacio { padding: 10px 12px; font-size: 13px; color: var(--ink-soft); }
+  /* Títulos "Agrupaciones" / "Tiendas" dentro del desplegable del buscador único. */
+  .plantilla-buscador-grupo {
+    position: sticky; top: 0; z-index: 1;
+    padding: 6px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--ink-soft); background: #f6f8fb; border-bottom: 1px solid var(--line);
+  }
   @media (max-width: 640px) {
     .plantilla-buscadores { flex-basis: 100%; max-width: none; margin: 0; }
     .plantilla-buscador-wrap { flex-basis: 100%; min-width: 0; }
@@ -1219,7 +1274,7 @@
   .plantilla-tienda-guardar:disabled { opacity: .3; cursor: default; background: none !important; color: var(--ink-soft) !important; }
   .plantilla-tiendas { display: flex; flex-direction: column; }
   .plantilla-tienda {
-    display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid var(--line);
   }
   .plantilla-tienda:first-child { border-top: none; }
   /* Límite, número y nombre ahora son de solo lectura en la fila (se
@@ -1227,7 +1282,7 @@
      mismo aspecto de "chip" de antes para no perder la referencia visual
      rápida, pero sin aspecto de campo editable. */
   .plantilla-tienda .lim {
-    width: 40px; flex-shrink: 0; text-align: center; border: 1px solid var(--line); border-radius: 6px;
+    width: 84px; flex-shrink: 0; text-align: center; border: 1px solid var(--line); border-radius: 6px;
     padding: 5px 4px; font-size: 12.5px; background: #f6f7f9; color: var(--ink);
   }
   /* Límite propio de ese día (override), distinto del general que viene de
@@ -1237,7 +1292,7 @@
     background: #fdf6ea; border-color: var(--amber-dark, #b8860b); color: var(--amber-dark, #b8860b); font-weight: 700;
   }
   .plantilla-tienda .numero {
-    width: 46px; flex-shrink: 0; text-align: center; border: 1px solid var(--line); border-radius: 6px;
+    width: 72px; flex-shrink: 0; text-align: center; border: 1px solid var(--line); border-radius: 6px;
     padding: 5px 4px; font-size: 12.5px; background: #f6f7f9; color: var(--ink);
   }
   .plantilla-tienda .nombre {
@@ -1266,12 +1321,63 @@
   .plantilla-ruta-flechas button:last-child { border-radius: 0 0 4px 4px; }
   .plantilla-ruta-flechas button:disabled { opacity: .35; }
   .plantilla-ruta-flechas button:hover:not(:disabled) { background: #e1e5eb; }
+  /* "Añadir tienda": botón azul relleno (la acción principal de la ruta).
+     Orden retirada y Grupos de palets, cuando están configurados, se
+     marcan con un fondo suave (no relleno) para no confundirse con él. */
   .plantilla-ruta-anadir-tienda {
-    flex-shrink: 0; background: none; border: 1px solid var(--line); color: var(--navy); font-weight: 700;
+    flex-shrink: 0; background: var(--prevision); border: 1px solid var(--prevision); color: #fff; font-weight: 700;
+    font-size: 11.5px; display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 7px;
+    white-space: nowrap;
+  }
+  .plantilla-ruta-anadir-tienda:hover { background: #2f62ad; border-color: #2f62ad; }
+  /* "+ Nota de carga" en la línea de la cabecera de la ruta. */
+  .plantilla-ruta-nota-carga {
+    flex-shrink: 0; background: none; border: 1px dashed #c3cad5; color: var(--navy); font-weight: 700;
     font-size: 11.5px; display: flex; align-items: center; gap: 4px; padding: 5px 9px; border-radius: 7px;
     white-space: nowrap;
   }
-  .plantilla-ruta-anadir-tienda:hover { background: #eef1f7; }
+  .plantilla-ruta-nota-carga:hover { background: #eef1f7; border-style: solid; }
+
+  /* Franja de interruptores de la ruta (PESO, C.EXPRESS, SOBRESTOCK,
+     VIERNES, DOMINGO, PDF ESPECIAL), bajo la cabecera. */
+  .plantilla-ruta-opciones {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 7px 10px 8px 34px; background: #fbfbfc; border-bottom: 1px solid var(--line);
+  }
+  .plantilla-ruta-opciones-label { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-right: 2px; }
+  .plantilla-chip {
+    --chip-c: var(--prevision); --chip-bg: #eaf1fb; --chip-borde: #b9cfee;
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    background: #fff; border: 1px solid var(--line); color: var(--ink-soft);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .02em; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .plantilla-chip.chip-viernes { --chip-c: var(--viernes); --chip-bg: var(--viernes-suave); --chip-borde: var(--viernes-borde); }
+  .plantilla-chip.chip-domingo { --chip-c: var(--domingo); --chip-bg: var(--domingo-suave); --chip-borde: var(--domingo-borde); }
+  .plantilla-chip:hover:not(:disabled) { border-color: var(--chip-borde); color: var(--chip-c); }
+  .plantilla-chip.activo { background: var(--chip-bg); border-color: var(--chip-borde); color: var(--chip-c); }
+  .plantilla-chip:disabled { cursor: default; }
+  .plantilla-chip:disabled:not(.activo) { opacity: .55; }
+
+  /* Fila de títulos encima de las tiendas. Los anchos coinciden con los
+     de .lim y .numero de las filas para que queden alineados. */
+  .plantilla-tiendas-cabecera {
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px 7px; background: #fbfbfc; white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+    font-size: 10px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .03em; line-height: 1.15;
+  }
+  .plantilla-tiendas-cabecera .col-lim { width: 84px; flex-shrink: 0; text-align: center; }
+  .plantilla-tiendas-cabecera .col-num { width: 72px; flex-shrink: 0; text-align: center; }
+  .plantilla-tiendas-cabecera .col-nombre { flex: 1 1 auto; padding-left: 8px; }
+  .plantilla-tiendas-cabecera .col-leyenda {
+    flex-shrink: 0; text-transform: none; letter-spacing: 0; font-weight: 600; display: flex; align-items: center; gap: 4px;
+  }
+  .plantilla-tiendas-cabecera .col-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-left: 4px; }
+  .plantilla-tiendas-cabecera .ley-carga { background: #e6f4ee; border: 1px solid #a9d6c3; }
+  .plantilla-tiendas-cabecera .ley-bloq { background: var(--danger); }
+  .plantilla-tiendas-cabecera + .plantilla-tienda { border-top: none; }
+  @media (max-width: 700px) {
+    .plantilla-tiendas-cabecera .col-leyenda { display: none; }
+  }
   .plantilla-ruta-peso {
     flex-shrink: 0; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
     font-size: 11.5px; padding: 5px 9px; border-radius: 7px; white-space: nowrap; letter-spacing: .02em;
@@ -1333,12 +1439,16 @@
   .plantilla-tienda-domingo.activo { background: var(--domingo); color: #fff; border-color: var(--domingo); text-decoration: none; }
   .plantilla-tienda-domingo.activo:hover:not(:disabled) { filter: brightness(1.08); }
   .plantilla-tienda-bloqueos { display: flex; gap: 3px; flex-shrink: 0; }
+  /* Botones de nave 60/PTA/CART.: verde suave = esa nave carga; rojo con
+     candado = bloqueada ("NO" en el conteo). Sin permiso se ven igual
+     (para saber qué está bloqueado), pero no se pueden pulsar. */
   .plantilla-tienda-bloqueo {
-    background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 58px;
+    background: #e6f4ee; border: 1px solid #a9d6c3; color: var(--ok); font-weight: 700;
     font-size: 9.5px; padding: 4px 6px; border-radius: 6px; white-space: nowrap; letter-spacing: .02em;
   }
-  .plantilla-tienda-bloqueo:hover:not(:disabled) { background: #eef1f7; }
-  .plantilla-tienda-bloqueo:disabled { opacity: .35; cursor: default; }
+  .plantilla-tienda-bloqueo:hover:not(:disabled) { background: #d6ede3; }
+  .plantilla-tienda-bloqueo:disabled { cursor: default; }
   .plantilla-tienda-bloqueo.activo { background: var(--danger); color: #fff; border-color: var(--danger); }
   .plantilla-tienda-bloqueo.activo:hover:not(:disabled) { background: #b23f3f; }
 
@@ -1386,7 +1496,7 @@
     display: flex; align-items: center; gap: 4px;
   }
   .plantilla-ruta-orden:hover { background: #eef1f7; }
-  .plantilla-ruta-orden.activo { background: var(--amber-dark); color: #fff; border-color: var(--amber-dark); }
+  .plantilla-ruta-orden.activo { background: #fdf3e3; color: var(--amber-dark); border-color: #efcf9f; }
   .plantilla-ruta-orden.activo:hover { filter: brightness(1.08); }
   .plantilla-ruta-grupos {
     flex-shrink: 0; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-weight: 700;
@@ -1394,7 +1504,7 @@
     display: flex; align-items: center; gap: 4px;
   }
   .plantilla-ruta-grupos:hover { background: #eef1f7; }
-  .plantilla-ruta-grupos.activo { background: var(--prevision); color: #fff; border-color: var(--prevision); }
+  .plantilla-ruta-grupos.activo { background: #eaf1fb; color: var(--prevision); border-color: #b9cfee; }
   .plantilla-ruta-grupos.activo:hover { filter: brightness(1.08); }
 
   /* Modal de "Orden de retirada" a nivel de ruta: dos columnas — tiendas
@@ -1483,6 +1593,13 @@
     box-sizing: border-box; color: var(--ink); background: #fff;
   }
   .modal-campo select:focus { border-color: var(--navy-soft); outline: none; }
+  /* Hora de carga: "desde" y, si es una franja, "hasta" en la misma línea. */
+  /* Segunda línea del título del modal (p. ej. el nombre de la agrupación). */
+  .modal-titulo-sub { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--ink-soft); letter-spacing: .2px; }
+  .modal-horas { display: flex; align-items: center; gap: 8px; }
+  .modal-horas input { flex: 1; }
+  .modal-horas-sep { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+  .modal-campo .modal-campo-ayuda { display: block; }
   /* Dos .modal-campo lado a lado dentro de un modal (p.ej. Tránsito +
      Límite de palets al dar de alta una tienda), en vez de uno debajo del
      otro a ancho completo. */
@@ -1670,6 +1787,12 @@
   .menu-rapido-buscar input {
     border: none; outline: none; font-size: 12.5px; flex: 1 1 auto; min-width: 0; color: var(--ink); background: none;
   }
+  .menu-rapido-limpiar {
+    border: none; background: #e3e6ec; color: var(--ink-soft); width: 18px; height: 18px; border-radius: 50%;
+    font-size: 13px; line-height: 18px; padding: 0; flex-shrink: 0; cursor: pointer; text-align: center;
+  }
+  .menu-rapido-limpiar:hover { background: #d3d8e0; color: var(--ink); }
+  .menu-rapido-limpiar[hidden] { display: none; }
   .menu-rapido-sin-resultados { color: var(--ink-soft); font-size: 12.5px; padding: 4px 2px; }
   .menu-rapido-body { display: flex; flex-direction: column; gap: 4px; }
   .menu-rapido-vacio { color: var(--ink-soft); font-size: 12.5px; padding: 4px 2px; }
@@ -1771,9 +1894,72 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700;
   }
   .seccion-header-top .info { flex: 1 1 auto; min-width: 120px; }
-  .seccion-header .name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .seccion-header .name { font-weight: 800; font-size: 16px; line-height: 1.25; letter-spacing: .1px; }
+  /* Cabecera de la agrupación en dos columnas (igual en todas):
+   *   NOMBRE              | ubicación · tiendas · estado
+   *   chips de verificado | pestañas "Carga ajustada / Ver conteo real"
+   * La 2ª línea solo ocupa sitio si tiene algo (chips o pestañas). */
+  .seccion-header .name-row {
+    /* El nombre se queda con todo el sitio libre y la ubicación / tiendas /
+     * estado / pestañas van en un bloque de ancho fijo hacia el centro
+     * (pegado a los botones de la derecha, que también tienen ancho fijo),
+     * así los nombres largos no se cortan y ese bloque empieza en el mismo
+     * sitio en todas las agrupaciones. */
+    display: grid; grid-template-columns: minmax(200px, 1fr) minmax(340px, max-content);
+    /* Las dos líneas siempre con el mismo alto (haya pestañas o solo
+     * chips), para que todas las cabeceras queden iguales y el nombre no
+     * parezca "más arriba" en unas que en otras. */
+    grid-auto-rows: minmax(32px, auto);
+    column-gap: 16px; row-gap: 4px; align-items: center;
+  }
+  /* Ubicación · tiendas · estado SIEMPRE en una sola línea: si la ubicación es
+   * larga (p. ej. dos horas "14:00 - 19:00") la columna crece un poco en vez
+   * de bajar "EN PROGRESO" a otra línea y hacer más alta la cabecera. */
+  .seccion-header .name-row-datos { display: flex; align-items: center; gap: 10px; row-gap: 6px; flex-wrap: nowrap; min-width: 0; justify-self: start; white-space: nowrap; }
+  .seccion-header .name-row > .verif-pastillas { grid-column: 1; grid-row: 2; padding-left: 2px; justify-self: start; align-self: start; margin-top: 3px; }
+  /* Nombre pegado abajo de su línea y chips arriba de la suya: así quedan
+   * juntos (sin el hueco del medio), sin cambiar el alto de la cabecera. */
+  .seccion-header .name-row > .name { align-self: end; }
+  .seccion-header .name-row > .vista-carga-tabs { grid-column: 2; grid-row: 2; justify-self: start; flex-wrap: nowrap; }
+  .seccion-header .name-row > .vista-carga-tabs { gap: 2px; }
+  .seccion-header .name-row > .vista-carga-tabs .vista-carga-tab { padding: 5px 9px; }
+  /* Aviso rojo cuando las naves están verificadas y falta ajustar la carga. */
+  .seccion-header .name-row > .aviso-carga-no-ajustada {
+    grid-column: 2; grid-row: 2; justify-self: start;
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px;
+    background: #fbe9e9; border: 1px solid #f0c4c4; color: #b23b3b;
+    font-size: 12px; font-weight: 800; letter-spacing: .2px; white-space: nowrap;
+  }
+  .seccion-header .name-row > .aviso-carga-no-ajustada[hidden] { display: none; }
+  /* Se ajusta según el ANCHO REAL de la tarjeta (no de la ventana), para
+   * que las pestañas nunca se partan en dos ni se monten sobre los botones:
+   *  - normal: dos columnas (nombre | ubicación, tiendas, estado, pestañas);
+   *  - estrecha: todo en una columna (nombre, datos, chips y pestañas). */
+  .seccion-header { container-type: inline-size; }
+  @container (max-width: 1100px) {
+    .seccion-header .name-row .name { font-size: 16px; }
+  }
+  @container (max-width: 989px) {
+    .seccion-header .name-row { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; row-gap: 6px; }
+    .seccion-header .name-row > .verif-pastillas,
+    .seccion-header .name-row > .vista-carga-tabs,
+    .seccion-header .name-row > .aviso-carga-no-ajustada { grid-column: 1; grid-row: auto; }
+    .seccion-header .name-row > .vista-carga-tabs { flex-wrap: wrap; }
+    .seccion-header .name-row-datos { flex-wrap: wrap; white-space: normal; }
+  }
+  @media (max-width: 700px) {
+    .seccion-header .name-row { grid-template-columns: minmax(0, 1fr); }
+    .seccion-header .name-row-datos { margin-top: 6px; }
+    .seccion-header .name-row > .verif-pastillas,
+    .seccion-header .name-row > .vista-carga-tabs,
+    .seccion-header .name-row > .aviso-carga-no-ajustada { grid-column: 1; grid-row: auto; white-space: normal; }
+  }
+  .seccion-header .name { font-weight: 800; font-size: 18px; line-height: 1.2; letter-spacing: .1px; }
   .seccion-header .count { color: var(--ink-soft); font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .seccion-header-controles {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    min-width: 316px; flex-shrink: 0; margin-left: 12px;
+  }
+  @container (max-width: 989px) { .seccion-header-controles { min-width: 0; } }
   .seccion-header-top .btn-toggle-colapsar {
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: auto;
     width: 28px; height: 28px; border-radius: 7px; border: none; background: none; cursor: pointer; padding: 0;
@@ -1801,7 +1987,7 @@
     display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
     color: var(--navy); background: #eef1f7; border: 1px solid #dde3ee;
     border-radius: 20px; padding: 3px 10px 3px 8px; text-transform: none; letter-spacing: 0;
-    flex-shrink: 0;
+    flex-shrink: 0; white-space: nowrap;
   }
   .badge-ubicacion svg { color: var(--amber-dark); flex-shrink: 0; }
 
@@ -1968,6 +2154,31 @@
     color: var(--ink-soft); font-size: 11.5px; font-weight: 600;
   }
   .menu-envios-aviso[hidden] { display: none; }
+  /* Sobre del email con lo ya enviado: azul = previsión enviada, verde =
+   * definitivo enviado, con una marca ✓ en la esquina. Quién y cuándo, al
+   * pasar el ratón y arriba del menú (sustituye a los badges de antes). */
+  .btn-menu-email { position: relative; }
+  .btn-menu-email.sobre-prevision { background: #e8f0fc; border-color: #a9c3ea; color: var(--prevision); }
+  .btn-menu-email.sobre-prevision:hover, .btn-menu-email.sobre-prevision.activo { background: #dbe7fa; }
+  .btn-menu-email.sobre-definitivo { background: #e3f3ec; border-color: #a6d6bf; color: var(--ok); }
+  .btn-menu-email.sobre-definitivo:hover, .btn-menu-email.sobre-definitivo.activo { background: #d4ece1; }
+  .sobre-marca {
+    position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
+    font-size: 9px; font-weight: 900; line-height: 1; color: #fff; background: var(--prevision);
+    pointer-events: none;
+  }
+  .sobre-definitivo .sobre-marca { background: var(--ok); }
+  .sobre-marca[hidden] { display: none; }
+  .menu-envios-estado { display: flex; flex-direction: column; gap: 4px; margin: 2px 2px 4px; }
+  .menu-envios-estado[hidden] { display: none; }
+  .menu-envios-estado-linea {
+    display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 8px;
+    font-size: 12px; line-height: 1.35;
+  }
+  .menu-envios-estado-linea strong { font-size: 12.5px; font-weight: 800; }
+  .menu-envios-estado-linea.prevision { background: #e8f0fc; color: #24508f; }
+  .menu-envios-estado-linea.definitivo { background: #e3f3ec; color: #22684f; }
   /* Menú de descargas (PDF / Excel / PDF especial): mismos botones de antes como opciones. */
   .btn-menu-descargas { color: var(--navy); border-color: #d6dce8; }
   .btn-menu-descargas:hover, .btn-menu-descargas.activo { background: #eef1f7; }
@@ -2081,6 +2292,20 @@
   .desliza.completo .desliza-relleno { background: #e4f3ec; }
   .desliza.completo .desliza-mando { background: var(--ok); }
   .desliza-fila .modal-cancel { flex-shrink: 0; }
+  /* Variante para eliminar (papelera): al llegar al final se queda en rojo. */
+  .desliza.desliza-borrar.completo { background: #fceded; border-color: #f3c6c6; }
+  .desliza.desliza-borrar.completo .desliza-relleno { background: #f6d4d4; }
+  .desliza.desliza-borrar.completo .desliza-mando { background: var(--danger); }
+  .desliza-opciones { margin-top: 4px; }
+  .desliza-opciones .gestor-tipo-pill { padding: 10px 8px; font-size: 12px; }
+  .desliza-aviso { margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--danger); }
+  .desliza.bloqueada { background: #f3f4f6; border-color: #dfe2e7; }
+  .desliza.bloqueada .desliza-relleno { background: #f3f4f6; }
+  .desliza.bloqueada .desliza-texto { color: var(--ink-soft); }
+  .desliza.bloqueada .desliza-mando { background: #b5bcc7; cursor: not-allowed; box-shadow: none; }
+
+  /* Papeleras de "Rutas y tiendas" (ruta, tienda y nota de carga) en rojo. */
+  .plantilla-ruta-borrar, .plantilla-tienda-borrar { color: var(--danger); }
   .table-wrap[hidden] { display: none; }
 
   /* Casillas apagadas por el bloqueo (operarios). */
@@ -2432,6 +2657,7 @@
   .modal-confirm { background: var(--navy); color: #fff; }
   .modal-confirm.danger { background: var(--danger); }
   .modal-whatsapp { background: #1fa855; color: #fff; display: inline-flex; align-items: center; gap: 7px; }
+  .modal-btn-matricula { display: inline-flex; align-items: center; gap: 7px; }
   .modal-confirm:disabled { background: #c7cbd3; color: #fff; cursor: not-allowed; }
   .modal-confirm:disabled:hover { filter: none; }
 
@@ -2748,6 +2974,19 @@
     background: #1f3a5f; color: #fff; font-size: 12.5px; font-weight: 400; padding: 7px 10px; letter-spacing: .02em;
   }
   .modal-lista-tabla tr.fila-camion.sin-camion td { background: #b9770e; }
+  /* Fichas de los camiones (columna izquierda de los modales de carga). */
+  .carga-fichas-camion { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .carga-ficha-camion { border: 1.5px solid #1f3a5f; border-radius: 10px; overflow: hidden; background: #fff; }
+  .carga-ficha-camion .cab {
+    background: #1f3a5f; color: #fff; font-size: 12px; font-weight: 700; padding: 6px 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .carga-ficha-camion .cab span { display: inline-flex; align-items: center; gap: 6px; }
+  .carga-ficha-camion .cab svg { width: 14px; height: 14px; }
+  .carga-ficha-camion .cab .palets.pasado { background: #c0392b; border-radius: 6px; padding: 1px 6px; }
+  .carga-ficha-camion .datos { display: flex; gap: 22px; padding: 8px 12px; flex-wrap: wrap; }
+  .carga-ficha-camion .datos .lbl { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); }
+  .carga-ficha-camion .datos b { font-size: 16px; color: var(--ink); }
   .modal-lista-tabla tr.fila-subtotal-camion td { background: #f6f7f9; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); text-align: right; padding: 6px 10px; }
   .modal-lista-tabla tr.fila-subtotal-camion td.num { text-align: center; color: var(--navy); font-weight: 800; }
   .modal-carga-cambio { margin-top: 0; margin-left: 6px; vertical-align: 1px; }
@@ -3354,6 +3593,178 @@
   table.admin-tabla td.admin-col-palets { font-weight: 700; color: var(--navy); text-align: center; }
   table.admin-tabla th.admin-col-palets { text-align: center; }
   table.admin-tabla td.admin-col-tienda { white-space: normal; min-width: 160px; }
+
+  /* ---- Administración > Registro de actividad ---- */
+  .admin-filtro-select {
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--ink); background: #f9fafb; height: 32px;
+  }
+  /* separate (no collapse): con collapse, las filas pegadas (sticky) dejan
+     asomar un par de píxeles de lo que pasa por debajo. */
+  table.admin-tabla-actividad { border-collapse: separate; border-spacing: 0; }
+  table.admin-tabla-actividad td { vertical-align: top; }
+  table.admin-tabla-actividad td.ra-detalle { white-space: normal; min-width: 260px; }
+  table.admin-tabla-actividad td.ra-agrupacion { white-space: normal; min-width: 170px; }
+  .ra-dia { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); margin-bottom: 1px; }
+  .ra-seccion {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 999px; margin-right: 4px; background: #eef1f7; color: var(--navy);
+  }
+  .ra-sec-conteos  { background: #e6f0fb; color: #1d4f8c; }
+  .ra-sec-bloqueos { background: #fdecea; color: #a1281c; }
+  .ra-sec-usuarios { background: #efe9fb; color: #5b3aa0; }
+  .ra-sec-plantilla { background: #e3f4f7; color: #0f6b7a; }
+  .ra-sec-envios   { background: #fdf3d6; color: #8a6200; }
+  .ra-sec-tiendas  { background: #e8f6ee; color: #1f7a45; }
+  .ra-sec-agencias { background: #fff3e0; color: #9a5a00; }
+  /* Filas del registro: hora con segundos, quién, qué hizo (verbo de
+     color + texto), dónde (conteo y agrupación) y sección. Cada día lleva
+     su propia fila de cabecera. */
+  table.admin-tabla-actividad tbody tr:nth-child(even) { background: none; }
+  table.admin-tabla-actividad td.ra-hora { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 600; }
+  table.admin-tabla-actividad td.ra-quien { white-space: normal; min-width: 140px; }
+  table.admin-tabla-actividad td.ra-que { white-space: normal; min-width: 280px; }
+  table.admin-tabla-actividad td.ra-donde { white-space: normal; min-width: 220px; }
+  table.admin-tabla-actividad td.ra-sec { width: 1%; }
+  .ra-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .ra-verbo {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-right: 6px;
+    background: #eef1f7; color: var(--navy);
+  }
+  .ra-v-add  { background: #e4f3ec; color: #1f7a45; }
+  .ra-v-del  { background: #fdecea; color: #a1281c; }
+  .ra-v-edit { background: #e6f0fb; color: #1d4f8c; }
+  .ra-v-warn { background: #fdf3d6; color: #8a6200; }
+  .ra-v-send { background: #efe9fb; color: #5b3aa0; }
+  .ra-v-move { background: #e3f4f7; color: #0f6b7a; }
+  table.admin-tabla-actividad tr.ra-fila-dia td {
+    background: #f3f5f9; font-weight: 800; color: var(--navy); font-size: 12.5px; padding: 7px 12px;
+    position: sticky; top: 31px; z-index: 1; border-bottom: 1px solid var(--line);
+  }
+  .ra-fila-dia td { display: table-cell; }
+  .ra-fila-dia-n { float: right; font-weight: 600; color: var(--ink-soft); font-size: 11.5px; }
+  .ra-resumen { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  /* Filtros del registro: periodo, usuarios (varios), sección y acción
+     (varias), cada uno en su fila con su etiqueta a la izquierda. */
+  .ra-filtros {
+    display: flex; flex-direction: column; gap: 9px; margin: 14px 0 12px; padding: 12px 14px;
+    background: #f9fafb; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .ra-filtro-fila { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ra-filtro-etq {
+    width: 74px; flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft);
+  }
+  .ra-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ra-chip {
+    display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); color: var(--ink);
+    font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .ra-chip:hover { border-color: #c3cad5; }
+  .ra-chip.activo { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .ra-chip.vacio:not(.activo) { opacity: .55; }
+  .ra-chip-n {
+    font-size: 10.5px; font-weight: 700; color: var(--ink-soft); background: #eef1f7; border-radius: 999px; padding: 0 6px; min-width: 18px; text-align: center;
+  }
+  .ra-chip.activo .ra-chip-n { background: rgba(255,255,255,.2); color: #fff; }
+  .ra-chip-check { font-size: 11px; }
+  /* Sección y acción: activas, con el color de su sección o verbo. */
+  .ra-chip-sec.activo.ra-sec-conteos   { background: #e6f0fb; color: #1d4f8c; border-color: #9fc0e8; }
+  .ra-chip-sec.activo.ra-sec-bloqueos  { background: #fdecea; color: #a1281c; border-color: #f1b2aa; }
+  .ra-chip-sec.activo.ra-sec-usuarios  { background: #efe9fb; color: #5b3aa0; border-color: #cbbaf0; }
+  .ra-chip-sec.activo.ra-sec-plantilla { background: #e3f4f7; color: #0f6b7a; border-color: #9ed3dc; }
+  .ra-chip-sec.activo.ra-sec-envios    { background: #fdf3d6; color: #8a6200; border-color: #ecd38a; }
+  .ra-chip-sec.activo.ra-sec-tiendas   { background: #e8f6ee; color: #1f7a45; border-color: #a7d9bb; }
+  .ra-chip-sec.activo.ra-sec-agencias  { background: #fff3e0; color: #9a5a00; border-color: #f0c98a; }
+  .ra-chip-sec:not(.activo), .ra-chip-verbo:not(.activo) { background: #fff; color: var(--ink); }
+  .ra-chip-verbo.activo { border-width: 1px; }
+  .ra-chip-verbo.activo.ra-v-add  { background: #e4f3ec; color: #1f7a45; border-color: #a7d9bb; }
+  .ra-chip-verbo.activo.ra-v-del  { background: #fdecea; color: #a1281c; border-color: #f1b2aa; }
+  .ra-chip-verbo.activo.ra-v-edit { background: #e6f0fb; color: #1d4f8c; border-color: #9fc0e8; }
+  .ra-chip-verbo.activo.ra-v-warn { background: #fdf3d6; color: #8a6200; border-color: #ecd38a; }
+  .ra-chip-verbo.activo.ra-v-send { background: #efe9fb; color: #5b3aa0; border-color: #cbbaf0; }
+  .ra-chip-verbo.activo.ra-v-move { background: #e3f4f7; color: #0f6b7a; border-color: #9ed3dc; }
+  .ra-chip-sec.activo .ra-chip-n, .ra-chip-verbo.activo .ra-chip-n { background: rgba(255,255,255,.7); color: inherit; }
+  .ra-fechas { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); }
+  .ra-fechas[hidden] { display: none; }
+  .ra-fechas input[type="date"] { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; background: #fff; }
+  .ra-periodo-texto { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+  .ra-filtro-vacio { font-size: 12px; color: var(--ink-soft); }
+  .ra-buscar { flex: 1 1 280px; min-width: 200px; background: #fff; }
+  /* Desplegable de usuarios con casillas. */
+  .ra-multi { position: relative; }
+  .ra-multi-btn {
+    display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; font-size: 12.5px; font-weight: 600; color: var(--ink); min-width: 220px; cursor: pointer;
+  }
+  .ra-multi-btn span { flex: 1 1 auto; text-align: left; }
+  .ra-multi-btn .chev { color: var(--ink-soft); }
+  .ra-multi-btn.con-seleccion { border-color: var(--navy); background: #eef1f7; color: var(--navy); }
+  .ra-multi-btn.abierto { border-color: var(--navy); }
+  .ra-multi-btn { min-width: 210px; }
+  .ra-multi-num {
+    flex: 0 0 auto !important; font-size: 10.5px; font-weight: 800; background: var(--navy); color: #fff;
+    border-radius: 999px; padding: 1px 7px;
+  }
+  .ra-multi-item.vacio { color: var(--ink-soft); }
+  .ra-multi-item.vacio .ra-multi-dot { opacity: .5; }
+  .ra-multi-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; background: #c3cad5; }
+  .ra-multi-dot.ra-sec-conteos   { background: #1d4f8c; }
+  .ra-multi-dot.ra-sec-bloqueos  { background: #a1281c; }
+  .ra-multi-dot.ra-sec-usuarios  { background: #5b3aa0; }
+  .ra-multi-dot.ra-sec-plantilla { background: #0f6b7a; }
+  .ra-multi-dot.ra-sec-envios    { background: #c99a1a; }
+  .ra-multi-dot.ra-sec-tiendas   { background: #1f7a45; }
+  .ra-multi-dot.ra-sec-agencias  { background: #d9822b; }
+  .ra-multi-dot.ra-v-add  { background: #1f7a45; }
+  .ra-multi-dot.ra-v-del  { background: #a1281c; }
+  .ra-multi-dot.ra-v-edit { background: #1d4f8c; }
+  .ra-multi-dot.ra-v-warn { background: #c99a1a; }
+  .ra-multi-dot.ra-v-send { background: #5b3aa0; }
+  .ra-multi-dot.ra-v-move { background: #0f6b7a; }
+  .ra-multi-menu {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 340px; background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px rgba(16, 26, 44, .16); overflow: hidden;
+  }
+  .ra-multi-menu[hidden] { display: none; }
+  .ra-multi-buscar { padding: 8px; border-bottom: 1px solid var(--line); }
+  .ra-multi-buscar input { width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font-size: 12.5px; }
+  .ra-multi-lista { max-height: 260px; overflow-y: auto; padding: 4px 0; }
+  .ra-multi-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; }
+  .ra-multi-item:hover { background: #f5f7fb; }
+  .ra-multi-item .nombre { flex: 1 1 auto; }
+  .ra-multi-pie { display: flex; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid var(--line); background: #fafbfc; }
+  .ra-multi-pie button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--ink); cursor: pointer; }
+  .ra-multi-pie button:disabled { opacity: .45; cursor: default; }
+  .ra-multi-pie button.principal { background: var(--navy); border-color: var(--navy); color: #fff; }
+  /* Filtros activos, con su × para quitarlos. */
+  .ra-activos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+  .ra-activos .ra-filtro-etq { width: auto; margin-right: 4px; white-space: nowrap; }
+  .ra-activo {
+    display: inline-flex; align-items: center; gap: 4px; background: #eef1f7; color: var(--navy); font-size: 12px; font-weight: 600;
+    padding: 3px 4px 3px 10px; border-radius: 999px;
+  }
+  .ra-activo button { border: none; background: none; color: var(--ink-soft); font-size: 15px; line-height: 1; padding: 0 5px; cursor: pointer; border-radius: 50%; }
+  .ra-activo button:hover { color: var(--danger); }
+  .ra-activos-limpiar { border: none; background: none; color: var(--danger); font-size: 12px; font-weight: 700; cursor: pointer; padding: 3px 6px; }
+  @media (max-width: 700px) {
+    .ra-filtro-etq { width: 100%; }
+  }
+  .ra-agrupar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); cursor: pointer; font-weight: 600; }
+  /* La tabla tiene su propio scroll para que la cabecera (Cuándo, Usuario...)
+     se quede fija arriba al bajar. */
+  /* La página no tiene scroll: solo se desplaza la tabla por dentro. Su
+     alto lo calcula ajustarAlturaTablaActividad_ (js/registro-actividad.js)
+     para que quepa justo hasta el final de la pantalla, con la paginación
+     debajo. La cabecera de la tabla y la de cada día se quedan fijas. */
+  .admin-tabla-wrap.ra-tabla-scroll { overflow: auto; max-height: 60vh; min-height: 200px; }
+  .admin-tabla-wrap.ra-tabla-scroll table.admin-tabla th { z-index: 2; top: 0; box-shadow: inset 0 -1px 0 var(--line); }
+  .ra-paginacion { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .ra-pag-btn {
+    background: #eef1f7; border: 1px solid #dde3ee; color: var(--navy); border-radius: 8px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .ra-pag-btn:hover:not(:disabled) { background: #e1e5eb; }
+  .ra-pag-btn:disabled { opacity: .45; cursor: default; }
+  .ra-pag-info { font-size: 12px; color: var(--ink-soft); padding: 0 8px; }
 
   /* ---- Administración > Servidores ---- */
   .servidores-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 6px; }
@@ -4115,3 +4526,17 @@ header.topbar .brand.abre-acerca-de:hover{ opacity:.85; }
     background: #e9c48f; color: #5b3a0c; border-radius: 8px; padding: 1px 5px; margin-left: 2px;
   }
   .grupos2-chip.puntual { border-color: #e9c48f; }
+
+/* Gestor de observaciones: campo Fecha vacío con el texto "Selecciona una
+   fecha" en lugar del dd/mm/aaaa del navegador (al pulsar en él, se ve
+   el campo normal para escribirla o elegirla en el calendario). */
+.gestor-fecha-wrap { position: relative; }
+.gestor-fecha-placeholder {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: #9aa3b0; font-size: 14px; pointer-events: none; display: none;
+}
+.modal-box.gestor-obs .gestor-fecha-placeholder { font-size: 15px; }
+.gestor-fecha-wrap.vacia .gestor-fecha-placeholder { display: block; }
+.gestor-fecha-wrap.vacia input[type="date"]:not(:focus) { color: transparent; }
+.gestor-fecha-wrap.vacia input[type="date"]:not(:focus)::-webkit-datetime-edit { color: transparent; }
+.gestor-fecha-wrap.vacia:focus-within .gestor-fecha-placeholder { display: none; }

@@ -269,35 +269,42 @@ function generarPdfSeccion(seccion, dia, fecha, tableWrap) {
 
 /**
  * PDF ESPECIAL: mismo formato que la plantilla Excel de reparto en camión
- * (columnas LÍMITE CAMIÓN / AGENCIA / LÍMITE / TIENDA / NAVE 60 / PTA /
- * CÁRTAMA / TOTAL / SOBRAN / TOTAL RUTA / FIRMA RES. TARDE / FIRMA RES.
+ * (columnas LÍMITE CAMIÓN / NAVE CARGA / LÍMITE / TIENDA / NAVE 60 / PTA /
+ * CÁRTAMA / TOTAL / TOTAL RUTA / FIRMA RES. TARDE / FIRMA RES.
  * NOCHE / CONFIRMACIÓN RECOGIDA / ZONA-PASILLO), pensado para imprimir y
  * rellenar a mano en el momento del reparto.
  *
  * Igual que en pantalla, las tiendas que comparten camión/ruta (la misma
  * anotación "8P MAX. POR RUTA" de las columnas K:L del Excel — en la app,
- * mismo "data-nota-grupo") se agrupan visualmente: LÍMITE CAMIÓN, AGENCIA,
- * SOBRAN, TOTAL RUTA y los campos de firma se pintan en UNA sola celda que
+ * mismo "data-nota-grupo") se agrupan visualmente: LÍMITE CAMIÓN,
+ * NAVE CARGA, TOTAL RUTA y los campos de firma se pintan en UNA sola celda que
  * abarca todas las filas de esa ruta (como una celda combinada), en vez de
  * repetirse en cada tienda. Una tienda sin ruta compartida forma su propio
  * grupo de una sola fila.
  *
- * - LÍMITE CAMIÓN sale del número de la anotación de ruta compartida por
- *   varias tiendas (ej. "8P MAX. POR RUTA" -> 8). Si la tienda no comparte
- *   ruta con nadie, o la anotación no tiene un número reconocible (p.ej.
- *   "SIN LÍMITE..."), queda en blanco: no es el límite de una tienda
- *   suelta, es el del camión.
- * - AGENCIA es el nombre de la agrupación (ej. "SEYLOTRANS MEDIO DIA").
+ * - LÍMITE CAMIÓN sale del número de la anotación de la ruta (ej. "8P MAX.
+ *   POR RUTA" -> 8) o, si la tienda va sola, de su propia nota ("8P MAX. -
+ *   CARGA EN GAITE" -> 8). Sin número ("SIN LIMITE...") o sin nota: SIN LÍMITE.
+ * - Ya no hay columna AGENCIA: el nombre de la agrupación sale en el título.
+ * - TOTAL RUTA de una tienda suelta (que no es ruta) sale rayada (campo nulo).
  * - TOTAL RUTA es la suma en vivo del TOTAL de todas las tiendas de esa
  *   ruta (misma suma que ya se ve en pantalla en el chip de la
  *   fila-cabecera del grupo).
- * - SOBRAN queda SIEMPRE en blanco: es un dato que se anota a mano en el
- *   momento del reparto, no se calcula.
+ * - NAVE CARGA sale de la anotación de la ruta (o de la tienda si va
+ *   sola): "... CARGA EN GAITE" -> GAITE. En blanco si no lo dice.
+ *   (Sustituye a la antigua columna SOBRAN, que ya no se usa.)
  * - LÍMITE, TIENDA, 60, PTA, CART. y TOTAL de cada fila salen de los
  *   datos ya introducidos en el conteo (igual que el PDF normal).
  * - Las 3 firmas y ZONA/PASILLO siguen en blanco para rellenar a mano,
  *   como se pidió: no hay ningún dato de la app del que puedan salir.
  */
+/** Nave de carga sacada de la anotación de la ruta o de la tienda
+ *  (ej. "8P MAX. POR RUTA - CARGA EN GAITE" -> "GAITE"). '' si no la dice. */
+function naveCargaDeNota_(texto) {
+  const m = String(texto || '').match(/CARGA\s+EN\s+([A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 ]*?)\s*(?:[-—·,;(]|$)/i);
+  return m ? m[1].trim().toUpperCase() : '';
+}
+
 function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
   // 1) Se recorren las filas de la tabla en pantalla y se agrupan por
   // "data-nota-grupo" (mismas tiendas que comparten ruta/camión). Una fila
@@ -315,8 +322,30 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
       return;
     }
     const limiteStr = tr.getAttribute('data-nota-limite');
+    // NAVE DE CARGA: de la anotación de la ruta (chip de la cabecera del
+    // grupo) o, si la tienda va sola, de su propia nota.
+    let notaTexto = '';
+    if (id) {
+      const chip = tableWrap.querySelector('tr[data-nota-grupo-header="' + id + '"] .grupo-header-chip');
+      notaTexto = chip ? chip.getAttribute('data-nota-base') : '';
+    } else {
+      const notaTienda = tr.querySelector('.nota-tienda');
+      notaTexto = notaTienda ? notaTienda.getAttribute('data-nota-base') : '';
+    }
+    // LÍMITE CAMIÓN: el de la ruta; si la tienda va sola, el número de su
+    // propia nota ("8P MAX. - CARGA EN GAITE" -> 8). "SIN LIMITE" o sin
+    // nota -> SIN LÍMITE.
+    let limiteCamion = id && limiteStr ? Number(limiteStr) : null;
+    if (!id) {
+      const mLim = String(notaTexto || '').match(/(\d+)\s*P\b/i);
+      if (mLim) limiteCamion = Number(mLim[1]);
+    }
     grupoActual = {
-      limiteCamion: id && limiteStr ? Number(limiteStr) : null,
+      // Solo las tiendas de un grupo de palets (mismo "data-nota-grupo")
+      // son una ruta como tal; una tienda suelta con su comentario no.
+      esRuta: !!id,
+      naveCarga: naveCargaDeNota_(notaTexto),
+      limiteCamion: limiteCamion,
       esGrupoInformativo: tr.getAttribute('data-nota-grupo-tipo') === 'total',
       filas: [tr]
     };
@@ -325,12 +354,13 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
   });
 
   // 2) Cada grupo se convierte en sus filas de tabla del PDF: la primera
-  // fila lleva las celdas "de ruta" (LÍMITE CAMIÓN, AGENCIA, SOBRAN, TOTAL
+  // fila lleva las celdas "de ruta" (LÍMITE CAMIÓN, NAVE CARGA, TOTAL
   // RUTA, firmas, ZONA/PASILLO) con rowSpan = nº de tiendas del grupo; las
   // siguientes filas del mismo grupo NO repiten esas columnas (quedan
   // cubiertas por la celda combinada de la primera).
   const filasPdf = [];
-  const grupoPorFilaPdf = []; // índice de grupo por cada fila añadida, para sombrear por ruta al dibujar
+  const grupoPorFilaPdf = []; // índice de grupo por cada fila añadida, para marcar las rutas al dibujar
+  const esRutaPorFilaPdf = []; // true si esa fila es de una ruta (grupo de palets)
 
   grupos.forEach(function (grupo, indiceGrupo) {
     let sumaTotal = 0;
@@ -340,18 +370,14 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
       if (!isNaN(v)) sumaTotal += v;
     });
 
-    // LÍMITE CAMIÓN solo se rellena cuando de verdad hay una nota de ruta
-    // compartida por varias tiendas (ej. "8P MAX. POR RUTA"): es el límite
-    // del CAMIÓN, no el de una tienda suelta, así que una tienda sin ruta
-    // compartida se deja en blanco (antes se rellenaba con su propio
-    // límite de tienda por error). Si no hay ningún número (ruta sin
-    // límite, o nota tipo "SIN LÍMITE..."), se escribe "SIN LÍMITE" en vez
-    // de dejarlo vacío. SOBRAN se deja SIEMPRE en blanco: es un dato que
-    // se anota a mano en el reparto, no se calcula.
+    // LÍMITE CAMIÓN: el número de la nota de la ruta o de la tienda suelta
+    // (nunca el LÍMITE propio de la tienda). Si no hay ningún número (nota
+    // tipo "SIN LÍMITE..." o sin nota), se escribe "SIN LÍMITE".
     const limiteCamion = grupo.limiteCamion;
     const limiteCamionTexto = limiteCamion == null ? 'SIN LÍMITE' : String(limiteCamion);
-    const sobran = '';
-    const totalRuta = grupo.esGrupoInformativo ? '' : sumaTotal;
+    // TOTAL RUTA solo en las rutas de verdad (grupo de palets); una tienda
+    // suelta lo deja en blanco.
+    const totalRuta = (grupo.esGrupoInformativo || !grupo.esRuta) ? '' : sumaTotal;
 
     grupo.filas.forEach(function (tr, i) {
       const esPrimera = i === 0;
@@ -390,12 +416,17 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
       const fila = [];
       if (esPrimera) {
         fila.push(celdaGrupo(limiteCamionTexto));
-        fila.push(celdaGrupo(agenciaNombre));
+        fila.push(celdaGrupo(grupo.naveCarga));
+        // (Sin columna AGENCIA: ya sale en el título de la hoja.)
       }
       fila.push.apply(fila, celdasPropias);
       if (esPrimera) {
-        fila.push(celdaGrupo(sobran));
-        fila.push(celdaGrupo(totalRuta));
+        // Tienda suelta (no es una ruta): su TOTAL RUTA no lleva dato y se
+        // raya entera (_nulo), para que se vea que es un campo vacío a
+        // propósito y no un hueco para rellenar.
+        const celdaTotalRuta = celdaGrupo(totalRuta);
+        if (celdaTotalRuta && !grupo.esRuta) celdaTotalRuta._nulo = true;
+        fila.push(celdaTotalRuta);
         fila.push(celdaGrupo('')); // FIRMA RES. TARDE
         fila.push(celdaGrupo('')); // FIRMA RES. NOCHE
         fila.push(celdaGrupo('')); // CONFIRMACIÓN RECOGIDA
@@ -404,60 +435,121 @@ function leerFilasPdfEspecialSeccion_(tableWrap, agenciaNombre) {
 
       filasPdf.push(fila);
       grupoPorFilaPdf.push(indiceGrupo);
+      esRutaPorFilaPdf.push(grupo.esRuta);
     });
   });
 
-  return { filas: filasPdf, grupoPorFila: grupoPorFilaPdf };
+  return { filas: filasPdf, grupoPorFila: grupoPorFilaPdf, esRutaPorFila: esRutaPorFilaPdf };
 }
 
-function dibujarPdfEspecialSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, filasInfo) {
-  doc.setFontSize(8);
+/** "escala" (1 = tamaño normal) encoge letras, rellenos y alto de filas
+ *  para que la tabla entera quepa en un A4 apaisado (ver
+ *  generarPdfEspecialSeccion). */
+function dibujarPdfEspecialSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, filasInfo, escala) {
+  const e = escala || 1;
+  const anchoPagina = doc.internal.pageSize.getWidth();
+  const M = PDF_ESP_MARGEN_MM_;
+
+  doc.setFontSize(7.5);
   doc.setTextColor(140, 148, 158);
-  doc.text('Generado el ' + fechaGeneracion, 14, 10);
+  doc.text('Generado el ' + fechaGeneracion, M, M);
   doc.setTextColor(0, 0, 0);
 
+  // Título (agrupación) a la izquierda y el día/fecha a la derecha, en la
+  // misma línea.
   doc.setFontSize(15);
   doc.setTextColor(28, 43, 69);
-  doc.text(partes.titulo + (partes.ubicacion ? ' · ' + partes.ubicacion : ''), 14, 18);
+  doc.text(partes.titulo + (partes.ubicacion ? ' · ' + partes.ubicacion : ''), M, M + 8);
 
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(90, 100, 114);
-  doc.text((dia || '') + ' · ' + formatearFechaLarga(fecha), 14, 24);
+  doc.text((dia || '') + ' · ' + formatearFechaLarga(fecha), anchoPagina - M, M + 8, { align: 'right' });
   doc.setTextColor(0, 0, 0);
 
   const grupoPorFila = filasInfo.grupoPorFila;
+  const esRutaPorFila = filasInfo.esRutaPorFila;
+  // ¿Hay que pintar borde grueso justo encima de la fila i? Sí al cambiar de
+  // grupo cuando a uno de los dos lados hay una ruta de verdad. Entre dos
+  // tiendas sueltas (sin grupo de palets) va la línea fina normal.
+  function bordeGruesoEncima(i) {
+    if (i === 0) return true;
+    if (grupoPorFila[i] === grupoPorFila[i - 1]) return false;
+    return esRutaPorFila[i] || esRutaPorFila[i - 1];
+  }
 
   doc.autoTable({
-    startY: 31,
+    startY: M + 13,
     theme: 'plain',
-    head: [['LÍMITE\nCAMIÓN', 'AGENCIA', 'LÍMITE', 'TIENDA', '60', 'PTA', 'CART.', 'TOTAL', 'SOBRAN', 'TOTAL\nRUTA', 'FIRMA RES.\nTARDE', 'FIRMA RES.\nNOCHE', 'CONFIRMACIÓN\nRECOGIDA', 'ZONA/\nPASILLO']],
+    head: [['LÍMITE\nCAMIÓN', 'NAVE\nCARGA', 'LÍMITE', 'TIENDA', '60', 'PTA', 'CART.', 'TOTAL', 'TOTAL\nRUTA', 'FIRMA RES.\nTARDE', 'FIRMA RES.\nNOCHE', 'CONFIRMACIÓN\nRECOGIDA', 'ZONA/\nPASILLO']],
     body: filasInfo.filas,
-    styles: { fontSize: 7.5, cellPadding: 2.5, valign: 'middle', halign: 'center', lineColor: [190, 196, 205], lineWidth: 0.15, fillColor: [255, 255, 255] },
-    headStyles: { fillColor: [28, 43, 69], textColor: 255, halign: 'center', fontSize: 7 },
-    bodyStyles: { halign: 'center', minCellHeight: 9 },
+    styles: { fontSize: 7.5 * e, cellPadding: 2.5 * e, valign: 'middle', halign: 'center', lineColor: [190, 196, 205], lineWidth: 0.15, fillColor: [255, 255, 255] },
+    headStyles: { fillColor: [28, 43, 69], textColor: 255, halign: 'center', fontSize: 7 * Math.max(e, 0.85) },
+    bodyStyles: { halign: 'center', minCellHeight: 9 * e },
+    // Anchos fijos (suman los 277 mm útiles del A4 apaisado): las columnas
+    // de datos, justas; el sitio que deja la antigua columna AGENCIA va a
+    // las 4 columnas que se rellenan a mano (firmas, recogida y zona).
     columnStyles: {
-      1: { fontStyle: 'bold' },
-      3: { fontStyle: 'bold', fontSize: 9, halign: 'left' },
-      7: { fontStyle: 'bold' },
-      13: { cellWidth: 30 }
+      0: { cellWidth: 18 },                                                // LÍMITE CAMIÓN
+      1: { cellWidth: 16, fontStyle: 'bold', fontSize: 8.5 * e },         // NAVE CARGA
+      2: { cellWidth: 13 },                                                // LÍMITE
+      3: { cellWidth: 46, fontStyle: 'bold', fontSize: 9 * e, halign: 'left' }, // TIENDA
+      4: { cellWidth: 10 },                                                // 60
+      5: { cellWidth: 10 },                                                // PTA
+      6: { cellWidth: 12 },                                                // CART.
+      // TOTAL y TOTAL RUTA más grandes, con menos relleno arriba/abajo para
+      // que la fila no crezca (el alto lo marca minCellHeight).
+      7: { cellWidth: 15, fontStyle: 'bold', fontSize: 12 * e, cellPadding: { top: 0.5 * e, bottom: 0.5 * e, left: 1, right: 1 } }, // TOTAL
+      8: { cellWidth: 16, fontStyle: 'bold', fontSize: 14 * e, cellPadding: { top: 0.5 * e, bottom: 0.5 * e, left: 1, right: 1 } }, // TOTAL RUTA
+      9: { cellWidth: 31 },                                                // FIRMA RES. TARDE
+      10: { cellWidth: 31 },                                               // FIRMA RES. NOCHE
+      11: { cellWidth: 31 },                                               // CONFIRMACIÓN RECOGIDA
+      12: { cellWidth: 28 }                                                // ZONA/PASILLO
     },
-    // Sombreado suave alternado POR RUTA (no por fila): todas las filas del
-    // mismo grupo comparten color, para que se aprecien de un vistazo los
-    // bloques de reparto por camión, igual que las celdas combinadas del
-    // Excel original. Con "theme: 'plain'" se desactiva el rayado propio
-    // de la librería (que alterna por FILA, no por ruta, y pisaba este
-    // color de forma inconsistente dentro de un mismo grupo).
-    didParseCell: function (data) {
+    // Todo el cuerpo en blanco (sin sombreado alternado): las rutas se
+    // separan solo con el borde grueso de abajo. Con "theme: 'plain'" se
+    // desactiva también el rayado propio de la librería.
+    // Borde grueso al empezar y al acabar cada ruta (y al final de la
+    // tabla), para que se vea de un vistazo dónde acaba una y empieza la
+    // siguiente. Las tiendas sueltas no llevan borde grueso entre ellas.
+    didDrawCell: function (data) {
       if (data.section !== 'body') return;
-      const grupo = grupoPorFila[data.row.index];
-      if (grupo % 2 === 1) data.cell.styles.fillColor = [242, 245, 249];
+      if (data.cell.raw && data.cell.raw._nulo) rayarCeldaPdf_(doc, data.cell);
+      const i = data.row.index;
+      const ultimaFilaCelda = i + (data.cell.rowSpan || 1) - 1;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.8);
+      if (bordeGruesoEncima(i)) {
+        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+      }
+      if (ultimaFilaCelda === grupoPorFila.length - 1) {
+        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+      }
     },
-    margin: { bottom: 10 },
+    margin: { top: M, left: M, right: M, bottom: M },
     rowPageBreak: 'avoid'
   });
 
   return doc.lastAutoTable.finalY;
 }
+
+/** Raya en diagonal toda la celda (campo que no lleva dato). */
+function rayarCeldaPdf_(doc, cell) {
+  const x = cell.x, y = cell.y, w = cell.width, h = cell.height, paso = 2.2;
+  doc.setDrawColor(150, 156, 166);
+  doc.setLineWidth(0.2);
+  for (let t = -h; t < w; t += paso) {
+    let x0 = x + t, y0 = y + h, x1 = x + t + h, y1 = y;
+    if (x0 < x) { y0 -= (x - x0); x0 = x; }
+    if (x1 > x + w) { y1 += (x1 - (x + w)); x1 = x + w; }
+    if (x1 > x0) doc.line(x0, y0, x1, y1);
+  }
+}
+
+const PDF_ESP_MARGEN_MM_ = 10; // margen del folio A4 en el PDF Control responsables
+// Escalas que se prueban, de más grande a más pequeña, hasta que la tabla
+// entera quepa en un A4 apaisado. Si ni con la más pequeña cabe (agrupación
+// enorme), se usa esa y la tabla sigue en una 2ª hoja A4.
+const PDF_ESP_ESCALAS_ = [1, 0.93, 0.86, 0.8, 0.74, 0.68, 0.63, 0.58, 0.54, 0.5];
 
 function generarPdfEspecialSeccion(seccion, dia, fecha, tableWrap) {
   if (!window.jspdf || !window.jspdf.jsPDF) {
@@ -471,13 +563,22 @@ function generarPdfEspecialSeccion(seccion, dia, fecha, tableWrap) {
   const fechaGeneracion = Utilities_formatearFechaHora_(ahora);
   const filasInfo = leerFilasPdfEspecialSeccion_(tableWrap, partes.titulo);
 
-  const docMedida = crearDocPdfPaginaExacta_(jsPDF, PDF_ANCHO_MM_, 2000);
-  const alturaContenido = dibujarPdfEspecialSeccion_(docMedida, partes, dia, fecha, fechaGeneracion, seccion, filasInfo);
+  // SIEMPRE un folio A4 apaisado de verdad (297 x 210 mm, con sus márgenes),
+  // para que al imprimir salga a tamaño real. Antes la hoja se alargaba lo
+  // que hiciera falta y al imprimir en A4 se encogía o se cortaba. Ahora se
+  // mide en un lienzo muy alto con cada escala y se usa la primera con la
+  // que la tabla entera cabe en el alto del A4.
+  const altoUtil = PDF_ALTO_A4_MM_ - PDF_ESP_MARGEN_MM_;
+  let escala = PDF_ESP_ESCALAS_[PDF_ESP_ESCALAS_.length - 1];
+  for (let i = 0; i < PDF_ESP_ESCALAS_.length; i++) {
+    const docMedida = crearDocPdfPaginaExacta_(jsPDF, PDF_ANCHO_MM_, 2000);
+    const alto = dibujarPdfEspecialSeccion_(docMedida, partes, dia, fecha, fechaGeneracion, seccion, filasInfo, PDF_ESP_ESCALAS_[i]);
+    if (alto <= altoUtil) { escala = PDF_ESP_ESCALAS_[i]; break; }
+  }
 
-  const alturaPagina = Math.max(PDF_ALTO_A4_MM_, alturaContenido + 14);
-  const doc = crearDocPdfPaginaExacta_(jsPDF, PDF_ANCHO_MM_, alturaPagina);
-  dibujarPdfEspecialSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, filasInfo);
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  dibujarPdfEspecialSeccion_(doc, partes, dia, fecha, fechaGeneracion, seccion, filasInfo, escala);
 
-  const nombreArchivo = 'Especial_' + seccion.nombre.replace(/[^a-z0-9áéíóúñ]+/gi, '_') + '_' + fecha + '.pdf';
+  const nombreArchivo = 'Control_responsables_' + seccion.nombre.replace(/[^a-z0-9áéíóúñ]+/gi, '_') + '_' + fecha + '.pdf';
   doc.save(nombreArchivo);
 }

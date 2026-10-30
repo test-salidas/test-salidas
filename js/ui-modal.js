@@ -37,6 +37,90 @@ function appConfirm(titulo, texto, onConfirm, peligro) {
   document.getElementById('modal-confirm-btn').onclick = function () { cerrarModal(); onConfirm(); };
 }
 
+const SVG_PAPELERA_DESLIZA_ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>';
+const SVG_CHECK_DESLIZA_ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+/**
+ * Confirmación de borrado "deslizando", igual que al desbloquear un
+ * conteo: en vez de un botón Eliminar, hay que arrastrar la papelera
+ * hasta el final de la barra (si se suelta antes, vuelve).
+ * opts = {
+ *   titulo, texto,
+ *   opciones: [{ valor, etiqueta }]  (opcional: se elige una antes de deslizar),
+ *   opcionInicial,                   (valor marcado al abrir, opcional)
+ *   textoBarra,                      (por defecto "Desliza para eliminar")
+ *   onConfirmar: function (valorElegido)
+ * }
+ */
+function appConfirmDeslizando(opts) {
+  const box = document.getElementById('modal-box');
+  ['ancho', 'usuario-form', 'gestor-obs'].forEach(function (c) { box.classList.remove(c); });
+  box.classList.add('medio');
+  box.classList.add('peligro');
+  document.getElementById('modal-title').style.display = '';
+  document.getElementById('modal-title').textContent = opts.titulo;
+  document.getElementById('modal-text').textContent = opts.texto || '';
+  document.getElementById('modal-text').style.display = opts.texto ? 'block' : 'none';
+  document.getElementById('modal-textarea').style.display = 'none';
+
+  const opciones = opts.opciones || [];
+  let elegida = opts.opcionInicial != null ? opts.opcionInicial : null;
+  const custom = document.getElementById('modal-custom');
+  if (opciones.length) {
+    custom.style.display = 'block';
+    custom.innerHTML =
+      '<div class="gestor-tipo-pills' + (opciones.length === 2 ? ' gestor-pills-2' : '') + ' desliza-opciones">' +
+        opciones.map(function (o) {
+          return '<button type="button" class="gestor-tipo-pill' + (o.valor === elegida ? ' activa' : '') + '" data-opcion-borrar="' + escapeAttr(o.valor) + '">' + escapeHtml(o.etiqueta) + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="desliza-aviso" id="desliza-aviso" style="display:none;">Elige una opción antes de deslizar.</div>';
+    custom.querySelectorAll('[data-opcion-borrar]').forEach(function (btn) {
+      btn.onclick = function () {
+        elegida = btn.getAttribute('data-opcion-borrar');
+        custom.querySelectorAll('[data-opcion-borrar]').forEach(function (b) { b.classList.toggle('activa', b === btn); });
+        document.getElementById('desliza-aviso').style.display = 'none';
+        const barra = document.querySelector('#modal-actions .desliza');
+        if (barra) {
+          barra.classList.remove('bloqueada');
+          barra.removeAttribute('aria-disabled');
+          barra.querySelector('.desliza-texto').innerHTML = escapeHtml(textoBarra) + ' &#8594;';
+        }
+      };
+    });
+  } else {
+    custom.style.display = 'none';
+    custom.innerHTML = '';
+  }
+
+  const textoBarra = opts.textoBarra || 'Desliza para eliminar';
+  // Con opciones y ninguna marcada, la barra sale bloqueada (gris) hasta
+  // que se elige una: así no se puede borrar sin decidir qué borrar.
+  const sinElegir = opciones.length > 0 && elegida == null;
+  const actions = document.getElementById('modal-actions');
+  actions.innerHTML =
+    '<div class="desliza-fila">' +
+      '<div class="desliza desliza-borrar' + (sinElegir ? ' bloqueada' : '') + '" role="slider" aria-label="' + escapeAttr(textoBarra) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"' + (sinElegir ? ' aria-disabled="true"' : '') + '>' +
+        '<span class="desliza-relleno"></span>' +
+        '<span class="desliza-texto">' + (sinElegir ? 'Elige una opción para poder eliminar' : escapeHtml(textoBarra) + ' &#8594;') + '</span>' +
+        '<span class="desliza-mando" tabindex="0" title="Arrastra hasta el final para eliminar">' + SVG_PAPELERA_DESLIZA_ + '</span>' +
+      '</div>' +
+      '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
+    '</div>';
+  document.getElementById('modal-overlay').style.display = 'flex';
+  document.getElementById('modal-cancel-btn').onclick = cerrarModal;
+  activarDeslizador_(
+    actions.querySelector('.desliza'),
+    function () { cerrarModal(); opts.onConfirmar(elegida); },
+    SVG_CHECK_DESLIZA_,
+    function () {
+      if (!opciones.length || elegida != null) return true;
+      document.getElementById('desliza-aviso').style.display = '';
+      return false;
+    }
+  );
+}
+
 function appPrompt(titulo, placeholder, onSubmit, mayusculas) {
   // mayusculas (opcional, por defecto true): si es true, lo que se escriba
   // en el textarea se convierte a mayúsculas automáticamente mientras se
@@ -622,7 +706,7 @@ function tablaCargaFija_(lista, revisar, marcarAjustadas, camiones) {
     cuerpo = filas.map(function (f) { return filaHtml(f); }).join('');
   } else {
     cuerpo = agr.grupos.map(function (g) {
-      return '<tr class="fila-camion' + (g.idx < 0 ? ' sin-camion' : '') + '"><td colspan="3">' + tituloCamionHtml_(g.camion, g.idx, agr.n) + '</td></tr>' +
+      return '<tr class="fila-camion' + (g.idx < 0 ? ' sin-camion' : '') + '"><td colspan="3">' + tituloCamionCortoHtml_(g.camion, g.idx, agr.n) + '</td></tr>' +
         g.items.map(function (it) { return filaHtml(it.f, it.cargar, it.sobra, it.parte); }).join('') +
         (agr.n >= 2 && g.idx >= 0
           ? '<tr class="fila-subtotal-camion"><td>Subtotal camión ' + (g.idx + 1) + '</td><td class="num">' + g.cargar + '</td><td class="num">' + (g.sobra || '—') + '</td></tr>'
@@ -634,7 +718,38 @@ function tablaCargaFija_(lista, revisar, marcarAjustadas, camiones) {
     '<tbody>' + cuerpo + '</tbody>' +
     '<tfoot><tr><td>Total palets' + (camiones.length >= 2 ? ' (' + camiones.length + ' camiones)' : '') + '</td><td class="num">' + totCargar + '</td><td class="num">' + totSobra + '</td></tr></tfoot>' +
   '</table></div>';
-  return { html: html, filas: filas, totContados: totContados, totCargar: totCargar, totSobra: totSobra, camiones: camiones };
+  const paletsCamion = camiones.map(function (c, i) {
+    const g = agr ? agr.grupos.filter(function (x) { return x.idx === i; })[0] : null;
+    return g ? g.cargar : 0;
+  });
+  return { html: html, filas: filas, totContados: totContados, totCargar: totCargar, totSobra: totSobra, camiones: camiones, paletsCamion: paletsCamion };
+}
+
+/** Franja de la tabla en pantalla: "CAMIÓN 2 · Matrícula 2210 MBX ·
+ *  Remolque R 0973 BFH" (el remolque solo si lo hay). Los palets van en la
+ *  ficha de la izquierda (fichasCamionesHtml_). */
+function tituloCamionCortoHtml_(camion, idx, n) {
+  if (idx < 0) return '<b>SIN CAMIÓN ASIGNADO</b>';
+  return '<b>CAMIÓN' + (n >= 2 ? ' ' + (idx + 1) : '') + '</b> · Matrícula ' + escapeHtml(camion.matricula || '') +
+    (camion.remolque ? ' · Remolque ' + escapeHtml(camion.remolque) : '');
+}
+
+/** Fichas de los camiones para la columna izquierda de los modales de
+ *  carga: matrícula, remolque y palets que lleva. No se pone "de 33"
+ *  porque no se sabe la capacidad de cada camión; solo se avisa en rojo
+ *  si pasa del máximo que puede llevar cualquiera (MAX_PALETS_CAMION). */
+function fichasCamionesHtml_(camiones, paletsCamion) {
+  if (!camiones || !camiones.length) return '';
+  return '<div class="carga-fichas-camion">' + camiones.map(function (c, i) {
+    const p = (paletsCamion && paletsCamion[i]) || 0;
+    const pasado = p > MAX_PALETS_CAMION;
+    return '<div class="carga-ficha-camion">' +
+      '<div class="cab"><span>' + ICONO_CAMION_16_ + 'CAMIÓN' + (camiones.length >= 2 ? ' ' + (i + 1) : '') + '</span>' +
+        '<span class="palets' + (pasado ? ' pasado' : '') + '">' + p + ' palets' + (pasado ? ' · más de ' + MAX_PALETS_CAMION : '') + '</span></div>' +
+      '<div class="datos"><div><span class="lbl">Matrícula</span><b>' + escapeHtml(c.matricula || '—') + '</b></div>' +
+        '<div><span class="lbl">Remolque</span><b>' + escapeHtml(c.remolque || '—') + '</b></div></div>' +
+    '</div>';
+  }).join('') + '</div>';
 }
 
 
@@ -646,6 +761,8 @@ function tablaCargaFija_(lista, revisar, marcarAjustadas, camiones) {
  *   revisar:     { 'NOMBRE TIENDA': {antes, ahora} } tiendas cuyo conteo cambió
  *   soloLectura: muestra la banda "Solo lectura" (usuario sin permiso)
  *   onEditar:    si viene, lápiz al lado de la X para pasar a editar la carga
+ *   onMatriculas: si viene (definitivo ya enviado y permiso «Ajustar carga»),
+ *                 botón para poner o cambiar matrícula y remolque
  * info.tipo 'contado': nadie ha ajustado todavía; se enseña lo contado.
  */
 function mostrarModalListaCarga(info, titulo, fechaTexto, extra) {
@@ -672,11 +789,11 @@ function mostrarModalListaCarga(info, titulo, fechaTexto, extra) {
             '<span>El conteo ha cambiado después de fijar la carga. Un responsable con permiso «Ajustar carga» tiene que verificarla.</span></div></div>'
         : '') +
       statsCargaHtml_(tabla.totContados, tabla.totCargar, tabla.totSobra) +
-      // Sin camiones de recogida con matrícula: se indica a la izquierda.
-      (camionesValidos_(info.camiones).length === 0
+      // Camiones con su matrícula a la izquierda; si no hay, se avisa.
+      (tabla.camiones.length === 0
         ? '<div class="modal-envio-aviso modal-envio-alerta"><div class="modal-envio-aviso-titulo">' + ICONO_CAMION_16_ +
             '<span>No hay matrículas asignadas</span></div></div>'
-        : '');
+        : fichasCamionesHtml_(tabla.camiones, tabla.paletsCamion));
     cuerpo = columnasCarga_(cuerpo, tabla.html);
   }
 
@@ -687,11 +804,17 @@ function mostrarModalListaCarga(info, titulo, fechaTexto, extra) {
   const actions = document.getElementById('modal-actions');
   actions.innerHTML =
     '<button class="modal-cancel" id="modal-cancel-btn">Cerrar</button>' +
+    (tabla && extra.onMatriculas
+      ? '<button class="modal-cancel modal-btn-matricula" id="modal-matriculas-btn" title="Poner o cambiar la matrícula y el remolque (los palets no se tocan)">' + ICONO_CAMION_16_ +
+          '<span>' + (camionesValidos_(info.camiones).length ? 'Cambiar matrícula' : 'Poner matrícula') + '</span></button>'
+      : '') +
     (tabla ? '<button class="modal-whatsapp" id="modal-whatsapp-btn" title="Compartir por WhatsApp">' + ICONO_COMPARTIR_16_ + '<span>WhatsApp</span></button>' : '') +
     (tabla ? '<button class="modal-confirm" id="modal-confirm-btn">Imprimir</button>' : '');
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
   if (extra.onEditar) ponerLapizModal_(false, extra.onEditar);
+  const btnMatriculas = document.getElementById('modal-matriculas-btn');
+  if (btnMatriculas) btnMatriculas.onclick = function () { extra.onMatriculas(info.camiones || []); };
   if (tabla) {
     const tipoTexto = tipo === 'definitivo' ? 'Definitivo' : (tipo === 'ajuste' ? 'Carga ajustada' : (tipo === 'contado' ? 'Lo contado' : 'Previsión'));
     document.getElementById('modal-confirm-btn').onclick = function () {
@@ -701,6 +824,77 @@ function mostrarModalListaCarga(info, titulo, fechaTexto, extra) {
       compartirListaCargaWhatsApp_(titulo, fechaTexto, tipoTexto, tabla.filas, tabla.totCargar, tabla.totSobra, tabla.camiones);
     };
   }
+}
+
+/**
+ * Modal "Matrícula del camión" con el definitivo ya enviado: solo matrícula
+ * (obligatoria) y remolque de cada camión. No se pueden añadir ni quitar
+ * camiones ni tocar palets (el reparto ya se envió). Sin camiones, se pone
+ * uno y todas las tiendas van en él.
+ *
+ * datos: { titulo, fechaTexto, camiones: [{matricula, remolque, ...}],
+ *          onGuardar: function(lista [{matricula, remolque}]), onCancelar }
+ */
+function mostrarModalMatriculasDefinitivo(datos) {
+  const custom = prepararModalCarga_();
+  document.getElementById('modal-box').classList.remove('ancho');
+  document.getElementById('modal-box').classList.add('medio');
+  const actuales = (Array.isArray(datos.camiones) && datos.camiones.length) ? datos.camiones : [{ matricula: '', remolque: '' }];
+  const lista = actuales.map(function (c) { return { matricula: (c && c.matricula) || '', remolque: (c && c.remolque) || '' }; });
+  function normalizar(t) {
+    return String(t || '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').replace(/\s+/g, ' ').replace(/^\s+/, '').slice(0, 15);
+  }
+
+  custom.innerHTML =
+    cabeceraModalCarga_('Matrícula del camión', datos.titulo + ' · Definitivo · ' + datos.fechaTexto, '') +
+    '<p class="modal-envio-nota" style="margin:4px 0 12px;">El definitivo ya está enviado: aquí solo se pone o se cambia la matrícula y el remolque. Los palets y el reparto de tiendas no cambian.</p>' +
+    '<div class="modal-camiones"><div class="modal-camiones-lista">' +
+      lista.map(function (c, k) {
+        return '<div class="modal-camion" data-k="' + k + '">' +
+          '<span class="modal-camion-num">' + (k + 1) + '</span>' +
+          '<label class="modal-camion-campo"><span>Matrícula</span><input type="text" class="cam-matricula" data-k="' + k + '" maxlength="15" autocomplete="off" placeholder="Matrícula" value="' + escapeHtml(c.matricula) + '"></label>' +
+          '<label class="modal-camion-campo"><span>Remolque</span><input type="text" class="cam-remolque" data-k="' + k + '" maxlength="15" autocomplete="off" placeholder="Remolque" value="' + escapeHtml(c.remolque) + '"></label>' +
+        '</div>';
+      }).join('') +
+    '</div><div class="modal-camiones-aviso"></div></div>';
+
+  const actions = document.getElementById('modal-actions');
+  actions.innerHTML =
+    '<button class="modal-cancel" id="modal-cancel-btn">Cancelar</button>' +
+    '<button class="modal-confirm" id="modal-confirm-btn">Guardar matrícula</button>';
+  document.getElementById('modal-overlay').style.display = 'flex';
+
+  custom.querySelectorAll('input.cam-matricula, input.cam-remolque').forEach(function (inp) {
+    inp.oninput = function () {
+      const pos = inp.selectionStart;
+      const limpio = normalizar(inp.value);
+      if (limpio !== inp.value) { inp.value = limpio; try { inp.setSelectionRange(pos, pos); } catch (e) { /* nada */ } }
+      const k = Number(inp.getAttribute('data-k'));
+      if (inp.classList.contains('cam-matricula')) lista[k].matricula = limpio; else lista[k].remolque = limpio;
+      inp.classList.remove('pasado');
+    };
+  });
+  document.getElementById('modal-cancel-btn').onclick = function () {
+    if (datos.onCancelar) datos.onCancelar(); else cerrarModal();
+  };
+  document.getElementById('modal-confirm-btn').onclick = function () {
+    const aviso = custom.querySelector('.modal-camiones-aviso');
+    for (let k = 0; k < lista.length; k++) {
+      lista[k].matricula = lista[k].matricula.trim();
+      lista[k].remolque = lista[k].remolque.trim();
+      if (!lista[k].matricula) {
+        const inp = custom.querySelector('input.cam-matricula[data-k="' + k + '"]');
+        if (inp) { inp.classList.add('pasado'); inp.focus(); }
+        aviso.textContent = 'Falta la matrícula' + (lista.length > 1 ? ' del camión ' + (k + 1) : '') + '.';
+        return;
+      }
+    }
+    datos.onGuardar(lista);
+  };
+  setTimeout(function () {
+    const primero = custom.querySelector('input.cam-matricula');
+    if (primero) primero.focus();
+  }, 50);
 }
 
 /**
@@ -1147,6 +1341,7 @@ function mostrarModalCargaCorrecta(datos) {
     columnasCarga_(
     estadoCargaHtml_(datos.carga) +
     statsCargaHtml_(tabla.totContados, tabla.totCargar, tabla.totSobra) +
+    fichasCamionesHtml_(tabla.camiones, tabla.paletsCamion) +
     '<div class="modal-envio-aviso modal-carga-info"><div class="modal-envio-aviso-titulo">' + ICONO_INFO_16_ +
       '<span>Esta es la carga que irá en el email de ' + etiqueta.toLowerCase() + '.</span></div></div>',
     tabla.html);
@@ -1176,7 +1371,8 @@ function mostrarModalCargaPendiente(datos) {
     columnasCarga_(
     '<div class="modal-envio-aviso modal-envio-alerta"><div class="modal-envio-aviso-titulo">' + ICONO_AVISO_16_ +
       '<span>El conteo ha cambiado después de fijar la carga. Avisa a un responsable con permiso «Ajustar carga» para que la verifique.</span></div></div>' +
-    statsCargaHtml_(tabla.totContados, tabla.totCargar, tabla.totSobra), tabla.html);
+    statsCargaHtml_(tabla.totContados, tabla.totCargar, tabla.totSobra) +
+    fichasCamionesHtml_(tabla.camiones, tabla.paletsCamion), tabla.html);
   document.getElementById('modal-actions').innerHTML = '<button class="modal-cancel" id="modal-cancel-btn">Cerrar</button>';
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('modal-cancel-btn').onclick = cerrarModal;
