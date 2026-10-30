@@ -140,6 +140,13 @@
       <nav class="topbar-nav" id="topbar-nav">
         <button type="button" class="topbar-nav-item" data-vista="inicio">Inicio</button>
         <button type="button" class="topbar-nav-item" data-vista="conteos">Conteos Diarios</button>
+        <div class="topbar-nav-dropdown" id="topbar-dropdown-almacen">
+          <button type="button" class="topbar-nav-item topbar-nav-item-dropdown" data-vista="almacen" aria-haspopup="true" aria-expanded="false">
+            Almacén
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="topbar-dropdown-menu" id="topbar-dropdown-menu-almacen"></div>
+        </div>
         <div class="topbar-nav-dropdown" id="topbar-dropdown-configuracion">
           <button type="button" class="topbar-nav-item topbar-nav-item-dropdown" data-vista="configuracion" aria-haspopup="true" aria-expanded="false">
             Diseño
@@ -338,6 +345,7 @@
 <script src="js/emails-agencias.js"></script>
 <script src="js/tiendas.js"></script>
 <script src="js/palets-forzados.js"></script>
+<script src="js/hoja-notas.js"></script>
 <script src="js/registro-actividad.js"></script>
 <script src="js/servidores.js"></script>
 <script src="js/cola-avisos.js"></script>

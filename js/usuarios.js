@@ -51,6 +51,12 @@ const CATALOGO_PERMISOS = [
     ],
   },
   {
+    grupo: 'Almacén',
+    items: [
+      { clave: 'hoja_notas', etiqueta: 'Editar hoja de notas', desc: 'Añadir, quitar, mover y editar tiendas y secciones de la hoja de notas (GAITE y PTA), sus festivos y copiar hojas. Sin este permiso la hoja se puede ver e imprimir, pero no cambiar.' },
+    ],
+  },
+  {
     grupo: 'Administración',
     items: [
       { clave: 'usuarios', etiqueta: 'Gestión de usuarios', desc: 'Crear, editar, eliminar y cambiar la contraseña de otros usuarios.' },

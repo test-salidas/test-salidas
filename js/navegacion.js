@@ -43,6 +43,7 @@ function cambiarVista(vista, seccion) {
 
   if (vista === 'configuracion' && seccion) ESTADO_CONFIG.seccionActiva = seccion;
   if (vista === 'administracion' && seccion) ESTADO_ADMIN.seccionActiva = seccion;
+  if (vista === 'almacen' && seccion) ESTADO_ALMACEN.seccionActiva = seccion;
   marcarSeccionActivaEnDropdown();
 
   if (vista === 'inicio') {
@@ -51,6 +52,8 @@ function cambiarVista(vista, seccion) {
     renderVistaConfiguracion();
   } else if (vista === 'administracion') {
     renderVistaAdministracion();
+  } else if (vista === 'almacen') {
+    renderVistaAlmacen();
   } else {
     if (!ESTADO.fecha) {
       ESTADO.fecha = hoyStr();
@@ -264,6 +267,14 @@ function renderVistaAdministracion() {
   const main = document.getElementById('main');
   main.innerHTML = '<div class="config-contenido" id="admin-contenido"></div>';
   renderSeccionAdminActiva();
+}
+
+/** ALMACÉN: mismo patrón que Configuración/Administración, con su propio
+ *  contenedor ("almacen-contenido"). */
+function renderVistaAlmacen() {
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="config-contenido" id="almacen-contenido"></div>';
+  if (ESTADO_ALMACEN.seccionActiva === 'hoja-notas') renderAlmacenHojaNotas();
 }
 
 function renderSeccionAdminActiva() {

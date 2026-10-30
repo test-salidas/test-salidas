@@ -27,7 +27,7 @@ const CLAVES_PERMISOS_UI_ = [
   'usuarios', 'notas', 'cierres', 'agencias',
   'tiendas', 'plantilla', 'aviso_tiendas', 'config_hora_aviso_tiendas',
   'festivos', 'palets_forzados', 'cola_emails', 'ver_cuadrante_completo',
-  'forzar_palets'
+  'forzar_palets', 'hoja_notas'
 ];
 
 /** Añade/quita la clase 'es-admin' en <body> (compatibilidad con las
@@ -60,6 +60,7 @@ function aplicarPermisosUI() {
   if (elRol) elRol.textContent = SESSION_ROL ? (SESSION_NOMBRE || (esAdmin() ? 'Administrador' : 'Operario')) : '';
   poblarDropdownConfiguracion();
   poblarDropdownAdministracion();
+  poblarDropdownAlmacen();
 }
 
 /* ---------------- NAVES (60 / PTA / CART.) ---------------- */

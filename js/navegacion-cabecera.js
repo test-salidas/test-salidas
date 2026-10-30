@@ -36,6 +36,15 @@ const ADMIN_SECCIONES = [
 ];
 let ESTADO_ADMIN = { seccionActiva: 'palets-forzados' };
 
+// Secciones de "Almacén": las ve cualquier usuario con sesión (`permiso:
+// null` aquí = sin permiso para VER; editar la hoja de notas va aparte con
+// el permiso "hoja_notas", ver js/hoja-notas.js).
+const ALMACEN_SECCIONES = [
+  { id: 'hoja-notas', label: 'Hoja de notas', permiso: null }
+  // futuras secciones de Almacén van aquí
+];
+let ESTADO_ALMACEN = { seccionActiva: 'hoja-notas' };
+
 // Botones simples (Inicio, Conteos): navegan directamente al pulsarlos.
 document.querySelectorAll('.topbar-nav > .topbar-nav-item').forEach(function (btn) {
   btn.addEventListener('click', function () { cambiarVista(btn.dataset.vista); });
@@ -94,6 +103,10 @@ function marcarSeccionActivaEnDropdown() {
     const activa = ESTADO.vista === 'administracion' && btn.getAttribute('data-seccion') === ESTADO_ADMIN.seccionActiva;
     btn.classList.toggle('activa', activa);
   });
+  document.querySelectorAll('#topbar-dropdown-menu-almacen .topbar-dropdown-item').forEach(function (btn) {
+    const activa = ESTADO.vista === 'almacen' && btn.getAttribute('data-seccion') === ESTADO_ALMACEN.seccionActiva;
+    btn.classList.toggle('activa', activa);
+  });
 }
 poblarDropdownConfiguracion();
 
@@ -118,3 +131,22 @@ function poblarDropdownAdministracion() {
   });
 }
 poblarDropdownAdministracion();
+
+/** Desplegable de "Almacén" (Hoja de notas...): mismo funcionamiento que
+ *  los de Diseño y Administración. */
+function poblarDropdownAlmacen() {
+  const cont = document.getElementById('topbar-dropdown-menu-almacen');
+  if (!cont) return;
+  cont.innerHTML = ALMACEN_SECCIONES.filter(function (s) { return !s.permiso || tienePermiso(s.permiso); }).map(function (s) {
+    const activa = ESTADO.vista === 'almacen' && s.id === ESTADO_ALMACEN.seccionActiva;
+    return '<button type="button" class="topbar-dropdown-item' + (activa ? ' activa' : '') + '" data-seccion="' + s.id + '">' + escapeHtml(s.label) + '</button>';
+  }).join('');
+  cont.querySelectorAll('.topbar-dropdown-item').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      cerrarDropdownsTopbar();
+      cambiarVista('almacen', btn.getAttribute('data-seccion'));
+    });
+  });
+}
+poblarDropdownAlmacen();
